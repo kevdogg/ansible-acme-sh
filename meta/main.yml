@@ -10,12 +10,25 @@ galaxy_info:
   platforms:
     - name: "Ubuntu"
       versions:
-        - "xenial"
-        - "bionic"
+        - all
     - name: "Debian"
       versions:
-        - "jessie"
-        - "stretch"
+        - all
+    - name: "MacOSX"
+      versions:
+        - all
+    - name: "Solaris"
+      versions:
+        - all
+    - name: "OpenBSD"
+      versions:
+        - all
+    - name: "FreeBSD"
+      versions:
+        - all
+    - name: "Alpine"
+      versions:
+        - all
 
   galaxy_tags:
     - "acme"
