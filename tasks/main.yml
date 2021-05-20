@@ -1,12 +1,20 @@
 ---
 
+- name: Determine if acme.sh is installed
+  ansible.builtin.stat:
+    path: "~/.acme.sh/acme.sh"
+  register: is_acme_sh_installed
+  become_user: "{{ acme_sh_become_user }}"
+
 - name: get https://raw.githubusercontent.com/acmesh-official/acme.sh/{{ acme_sh_git_version }}/acme.sh
   ansible.builtin.get_url:
     url: "https://raw.githubusercontent.com/acmesh-official/acme.sh/{{ acme_sh_git_version }}/acme.sh"
     dest: "{{ acme_sh_git_clone_dest }}"
     mode: 0744
     force: "{{ acme_sh_git_clone_force|default(False) }}"
-  when: not acme_sh_uninstall
+  when:
+    - not acme_sh_uninstall
+    - not is_acme_sh_installed.stat.exists
   become_user: "{{ acme_sh_become_user }}"
 
 - name: Install acme.sh
@@ -16,14 +24,11 @@
     {{ "--accountemail " + acme_sh_account_email if acme_sh_account_email else "" }}
   args:
     creates: "~/.acme.sh/acme.sh"
-  when: not acme_sh_uninstall
+  when:
+    - not acme_sh_uninstall
+    - not is_acme_sh_installed.stat.exists
   become_user: "{{ acme_sh_become_user }}"
 
-- name: Determine if acme.sh is installed
-  ansible.builtin.stat:
-    path: "~/.acme.sh/acme.sh"
-  register: is_acme_sh_installed
-  become_user: "{{ acme_sh_become_user }}"
 
 - name: Upgrade acme.sh
   ansible.builtin.command: ./acme.sh --upgrade
