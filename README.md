@@ -314,6 +314,8 @@ acme_sh_domains:
 #    remove: True
 #    # Optionally domain dns alias.
 #    challenge_alias: alias-2-example.com
+#    # change the default CA server back to lets encrypt
+#    acme_sh_default_server: letsencrypt
 ```
 
 ## Example usage

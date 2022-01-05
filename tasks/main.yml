@@ -42,6 +42,14 @@
   changed_when: upgrade_result.rc == 0 and "Upgrade success" in upgrade_result.stdout
   become_user: "{{ acme_sh_become_user }}"
 
+- name: Use given CA authority
+  ansible.builtin.command: ./acme.sh --set-default-ca --server {{ acme_sh_default_server }}
+  args:
+    chdir: "~/.acme.sh"
+  become_user: "{{ acme_sh_become_user }}"
+
+
+
 - name: Create certificate path
   ansible.builtin.file:
     path: "{{ acme_sh_copy_certs_to_path }}"

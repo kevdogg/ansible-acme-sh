@@ -43,6 +43,8 @@ acme_sh_default_remove: False
 acme_sh_default_challenge_alias: ""
 acme_sh_default_domain_alias: ""
 
+acme_sh_default_server: "letsencrypt"
+
 acme_sh_domains: []
 
 acme_sh_enable_notify: False
