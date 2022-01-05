@@ -442,7 +442,7 @@ Now you would run `ansible-playbook -i inventory/hosts site.yml -t acme_sh`.
 
 ## Installation
 
-`$ ansible-galaxy install nickjj.acme_sh`
+`$ ansible-galaxy install lionslair.acme_sh`
 
 ## Ansible Galaxy
 
