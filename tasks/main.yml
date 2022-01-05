@@ -48,8 +48,6 @@
     chdir: "~/.acme.sh"
   become_user: "{{ acme_sh_become_user }}"
 
-
-
 - name: Create certificate path
   ansible.builtin.file:
     path: "{{ acme_sh_copy_certs_to_path }}"
