@@ -42,7 +42,7 @@
   changed_when: upgrade_result.rc == 0 and "Upgrade success" in upgrade_result.stdout
   become_user: "{{ acme_sh_become_user }}"
 
-- name: Use given CA authority
+- name: Use given CA authority - default lets encrypt.
   ansible.builtin.command: ./acme.sh --set-default-ca --server {{ acme_sh_default_server }}
   args:
     chdir: "~/.acme.sh"
