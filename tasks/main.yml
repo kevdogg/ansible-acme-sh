@@ -1,20 +1,27 @@
 ---
-- name: Install acme_letsencrypt service and timer block
-  include_tasks: systemd-install.yml
-  when:
-    - not_acme_sh_uninstall
 
-- name: Start acme.sh certificate(s) renewlas from systemd timers
-  include_tasks: systemd-start-renewals.yml
-  when:
-    - not acme_sh_uninstall
+- name: systemd block
+  block:
+    - name: Install acme_letsencrypt service and timer block
+      include_tasks: systemd-install.yml
+      when:
+        - not_acme_sh_uninstall
+    
+    - name: Start acme.sh certificate(s) renewlas from systemd timers
+      include_tasks: systemd-start-renewals.yml
+      when:
+        - not acme_sh_uninstall
+    
+    - name: Remove acme.sh certificate(s) renewals from systemd timers
+      include_tasks: systemd-stop-renewals.yml
+      when:
+        - not acme_sh_uninstall
+    
+    - name: Disable acme_letsencrypt server and timer files
+      include_tasks: systemd-remove.yml
+      when:
+        - acme_sh_uninstall
+  tags: [ systemd ]
+  become: true
+  become_user: {{ acme_sh_become_user }}
 
-- name: Remove acme.sh certificate(s) renewals from systemd timers
-  include_tasks: systemd-stop-renewals.yml
-  when:
-    - not acme_sh_uninstall
-
-- name: Disable acme_letsencrypt server and timer files
-  include_tasks: systemd-remove.yml
-  when:
-    - acme_sh_uninstall

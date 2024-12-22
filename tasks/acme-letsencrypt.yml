@@ -6,6 +6,26 @@
   register: is_acme_sh_installed
   become_user: "{{ acme_sh_become_user }}"
 
+- name: Create git clone path
+  file:
+      path: "{{ acme_sh_git_clone_dest | dirname }}"
+      state: "directory"
+      owner: "{{ acme_sh_become_user }}"
+      group: "{{ acme_sh_become_user }}"
+      mode: "0755"
+  when:
+    - not acme_sh_uninstall
+  become_user: "{{ acme_sh_become_user }}"
+
+- name: Git clone https://github.com/acmesh-official/acme.sh
+  git:
+    repo: "{{ acme_sh_git_url }}"
+    version: "{{ acme_sh_git_version }}"
+    dest: "{{ acme_sh_git_clone_dest }}"
+    update: "{{ acme_sh_git_update }}"
+  when: not acme_sh_uninstall
+  become_user: "{{ acme_sh_become_user }}"
+
 - name: get https://raw.githubusercontent.com/acmesh-official/acme.sh/{{ acme_sh_git_version }}/acme.sh
   ansible.builtin.get_url:
     url: "https://raw.githubusercontent.com/acmesh-official/acme.sh/{{ acme_sh_git_version }}/acme.sh"
@@ -18,10 +38,29 @@
   become_user: "{{ acme_sh_become_user }}"
 
 - name: Install acme.sh
+  command: >-
+    ./acme.sh --install --log
+    --days {{ acme_sh_renew_time_in_days }}
+    {{ "--accountemail " + acme_sh_account_email if acme_sh_account_email else "" }}
+    {% if acme_sh_extra_flags_install %}
+    {{ acme_sh_extra_flags_install }}
+    {% elif acme_sh_default_extra_flags_install %}
+    {{ acme_sh_default_extra_flags_install }}
+    {% else %}
+    ""
+    {% endif %}
+  args:
+    chdir: "{{ acme_sh_git_clone_dest }}"
+    creates: "~/.acme.sh/acme.sh"
+  when: not acme_sh_uninstall
+  become_user: "{{ acme_sh_become_user }}"
+
+- name: Install acme.sh
   ansible.builtin.shell: >-
     {{ acme_sh_git_clone_dest }} --install-online --log
     --days {{ acme_sh_renew_time_in_days }}
     {{ "--accountemail " + acme_sh_account_email if acme_sh_account_email else "" }}
+    {{ acme_sh_default_extra_flags_install }}
   args:
     creates: "~/.acme.sh/acme.sh"
   when:

@@ -1,19 +1,21 @@
 ---
 
-acme_sh_become_user: "root"
+acme_sh_become_user: "{{ vault_root_user | default ('root')  }} "
 
+acme_sh_git_url: "https://github.com/acmesh-official/acme.sh"
+acme_sh_git_version: "master"
 acme_sh_git_version: "master"
 acme_sh_git_clone_dest: "/usr/local/src/acme.sh"
 acme_sh_git_clone_force: False
 
-acme_sh_upgrade: False
+acme_sh_upgrade: True
 acme_sh_uninstall: False
 
-acme_sh_account_email: ""
+acme_sh_account_email: "{{ vault_acme_sh_account_email }}"
 
 acme_sh_renew_time_in_days: 30
 
-acme_sh_copy_certs_to_path: "/etc/ssl/ansible"
+acme_sh_copy_certs_to_path: "/etc/ssl/letsencrypt"
 
 acme_sh_list_domains: True
 
@@ -22,12 +24,13 @@ acme_sh_default_staging: True
 acme_sh_default_force_issue: False
 acme_sh_default_force_renew: False
 
-acme_sh_default_debug: False
+acme_sh_default_debug: True
 
-acme_sh_default_dns_provider: "dns_dgon"
+acme_sh_default_dns_provider: "dns_cf"
 acme_sh_default_dns_provider_api_keys: {}
 acme_sh_default_dns_sleep: 120
 
+acme_sh_default_extra_flags_install: ""
 acme_sh_default_extra_flags_issue: ""
 acme_sh_default_extra_flags_renew: ""
 acme_sh_default_extra_flags_install_cert: ""
