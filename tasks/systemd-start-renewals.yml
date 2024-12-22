@@ -1,0 +1,12 @@
+---
+- name: Start acme_letsencrypt@.timer
+  ansible.builtin.systemd_service:
+    name: "acme_letsencrypt@{{ item.domains | first }}.timer"
+    enabled: true
+    state: started
+    daemon_reload: true
+  loop: "{{ acme_sh_domains }}"
+  when:
+    - acme_sh_domains and item.domains is defined and item.domains
+    - item.remove is undefined or not item.remove
+  become_user: "{{ acme_sh_become_user }}"

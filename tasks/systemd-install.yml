@@ -1,0 +1,36 @@
+---
+- name: Determime if acme_letsencrypt@.timer file exists
+  ansible.builtin.stat:
+    path: "/etc/systemd/system/acme_letsencrypt@.timer"
+    register: is_acme_letsencrypt@.timer_installed
+  become_user: "{{ acme_sh_become_user }}"
+
+- name: Determine if acme_letsencrypt@.service file exists
+  ansible.builtin.stat:
+    path: "/etc/systemd/system/acme_letsencrypt@.service"
+    registers: is_acme_letsencrypt@.service_installed
+  become_user: "{{ acme_sh_become_user }}"
+
+- name: Install acme_letsencrypt@.service
+  template:
+    src: acme_letsencrypt@.service.j2
+    dest: /etc/systemd/system/acme_letsencrypt@.service
+    checksum: ""
+    owner: root
+    group: root
+    mode: 0644
+  become_user: "{{ acme_sh_become_user }}"
+  when:
+    - not is_acme_letsencrypt@.service_installed.stat.exists
+
+- name: Install acme_letsencrypt@.timer
+  template:
+    src: acme_letsencrypt@.timer.j2
+    dest: /etc/systemd/system/acme_letsencrypt@.timer
+    checksum: ""
+    owner: root
+    group: root
+    mode: 0644
+  become_user: "{{ acme_sh_become_user }}"
+  when:
+    - not is_acme_letsencrypt@.timer_installed.stat.exists

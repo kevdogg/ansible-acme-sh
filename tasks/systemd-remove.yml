@@ -1,0 +1,32 @@
+---
+- name: Stop all running acme_letsencrypt timers
+  include_tasks: systemd-stop-renewals.yml
+
+- name: Determine if acme_letsencrypt@.timer file exists
+  ansible.builtin.stat:
+    path: "/etc/systemd/system/acme_letsencrypt@.timer"
+    registers: is_acme_letsencrypt@.timer_installed
+  become_user: "{{ acme_sh_become_user }}"
+
+- name: Determine if acme_letsencrypt@.service file exists
+  ansible.builtin.stat:
+    path: "/etc/systemd/system/acme_letsencrypt@.service"
+    registers: is_acme_letsencrypt@.service_installed
+  become_user: "{{ acme_sh_become_user }}"
+
+- name: Remove acme_letsencrypt@.timer file if it exists
+  ansible.builtin.file:
+    path: "{{ /etc/systemd/system/acme_letsencrypt@.timer }}"
+    state: "absent"
+  become_user: "{{ acme_sh_become_user }}"
+  when:
+    - is_acme_letsencrypt@.timer_installed.stat.exists
+
+- name: Remove acme_letsencrypt@.service file if it exists
+  ansible.builtin.file:
+    path: "{{ /etc/systemd/system/acme_letsencrypt@.service }}"
+    state: "absent"
+  become_user: "{{ acme_sh_become_user }}"
+  when:
+    - is_acme_letsencrypt@.service_installed.stat.exists
+
