@@ -35,7 +35,7 @@
     - item.remove is undefined or not item.remove
     - not acme_sh_uninstall
   become_user: "{{ acme_sh_become_user }}"
-  
+
 - name: Stop acme_letsencrypt@.timer
   ansible.builtin.systemd_servie:
     name: "acme_letsencrypt@{{ item.domains | first }}.timer"
@@ -82,4 +82,3 @@
   when:
     - acme_sh_uninstall
     - is_acme_letsencrypt@.service_installed.stat.exists
-

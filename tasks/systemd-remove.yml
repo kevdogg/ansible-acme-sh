@@ -1,32 +1,44 @@
 ---
 - name: Stop all running acme_letsencrypt timers
-  include_tasks: systemd-stop-renewals.yml
+  ansible.builtin.include_tasks:
+    file: systemd-stop-renewals.yml
+    apply:
+      tags: systemd_stop
 
-- name: Determine if acme_letsencrypt@.timer file exists
+- name: Determine if acme_letsencrypt.timer file exists
   ansible.builtin.stat:
-    path: "/etc/systemd/system/acme_letsencrypt@.timer"
-    registers: is_acme_letsencrypt@.timer_installed
+    path: "{{ systemd_files_location}}/acme_letsencrypt.timer"
+  register: is_acme_letsencrypt_timer_installed
   become_user: "{{ acme_sh_become_user }}"
 
-- name: Determine if acme_letsencrypt@.service file exists
+- name: Determine if acme_letsencrypt.service file exists
   ansible.builtin.stat:
-    path: "/etc/systemd/system/acme_letsencrypt@.service"
-    registers: is_acme_letsencrypt@.service_installed
+    path: "{{ systemd_files_location}}/acme_letsencrypt.service"
+  register: is_acme_letsencrypt_service_installed
   become_user: "{{ acme_sh_become_user }}"
 
-- name: Remove acme_letsencrypt@.timer file if it exists
-  ansible.builtin.file:
-    path: "{{ /etc/systemd/system/acme_letsencrypt@.timer }}"
-    state: "absent"
-  become_user: "{{ acme_sh_become_user }}"
+- name: Remove all acme_letsencrypt@<domain>.timer/service files
+  ansible.builtin.include_tasks:
+    file: systemd-remove-domain-system-timer-files.yml
+    apply:
+      tags: systemd_remove
+  loop: "{{ acme_sh_domains }}"
   when:
-    - is_acme_letsencrypt@.timer_installed.stat.exists
+    - acme_sh_domain and item.domains is defined and item.domains
+    - item.remove is defined and item.remove
 
-- name: Remove acme_letsencrypt@.service file if it exists
+- name: Remove acme_letsencrypt.timer file if it exists
   ansible.builtin.file:
-    path: "{{ /etc/systemd/system/acme_letsencrypt@.service }}"
+    path: "{{ systemd_files_location}}/acme_letsencrypt.timer"
     state: "absent"
-  become_user: "{{ acme_sh_become_user }}"
   when:
-    - is_acme_letsencrypt@.service_installed.stat.exists
+    - is_acme_letsencrypt_timer_installed.stat.exists
+  become_user: "{{ acme_sh_become_user }}"
 
+- name: Remove acme_letsencrypt.service file if it exists
+  ansible.builtin.file:
+    path: "{{ systemd_files_location }}/acme_letsencrypt@.service"
+    state: "absent"
+  when:
+    - is_acme_letsencrypt_service_installed.stat.exists
+  become_user: "{{ acme_sh_become_user }}"

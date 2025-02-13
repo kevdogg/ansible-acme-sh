@@ -1,0 +1,20 @@
+---
+- name:  Determine if there exists a pkcs12.pfx file already installed
+  ansible.builtin.stat:
+    path: "{{ acme_sh_copy_certs_to_path }}/{{ item.domains | first }}/pkcs12.pfx"
+  register: pkcs12_file_exists
+  become_user: "{{ acme_sh_become_user }}"
+
+- name: Create a pkcs12.pfx file
+  ansible.builtin.command: >-
+    {{ which_openssl_result.stdout + " pkcs12 -export" }}
+    -in fullchain.pem
+    -inkey key.pem
+    -out pkcs12.pfx
+    {{ "-passout pass:" + item.acme_sh_pkcs12_password | default(acme_sh_default_pkcs12_password) if item.acme_sh_pkcs12_password | default(acme_sh_default_pkcs12_password) else "" }}
+  args:
+    chdir: "{{ acme_sh_copy_certs_to_path }}/{{ item.domains | first }}"
+  when:
+    - not pkcs12_file_exists.stat.exists
+  become_user: "{{ acme_sh_become_user }}"
+  register: pkcs12_create_result

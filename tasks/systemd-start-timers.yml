@@ -1,0 +1,27 @@
+---
+- name: Determine if systemd timer template file exists
+  ansible.builtin.stat:
+    path: "{{ systemd_files_location }}/acme_letsencrypt.timer"
+  register: timer_template_exists
+  when:
+    - not acme_sh_uninstall or acme_sh_uninstall|bool == false
+  become_user: "{{ acme_sh_become_user }}"
+
+- name: Determine if systemd service  template file exists
+  ansible.builtin.stat:
+    path: "{{ systemd_files_location }}/acme_letsencrypt.service"
+  register: service_template_exists
+  when:
+    - not acme_sh_uninstall or acme_sh_uninstall|bool == false
+  become_user: "{{ acme_sh_become_user }}"
+
+- name: Start systemd acme_letsencrypt@.timer for domain
+  ansible.builtin.systemd_service:
+    name: "acme_letsencrypt@{{ item.domains | first }}.timer"
+    enabled: true
+    state: "started"
+    daemon_reload: true
+  when:
+    - timer.template_exists.stat.exists and service_template_exists.stat.exists
+    - not acme_sh_uninstall or acme_sh_uninstall|bool == false
+  become_user: "{{ acme_sh_become_user }}"

@@ -1,0 +1,36 @@
+---
+- name: Determine if {{ systemd_timer_name }} exists
+  ansible.builtin.stat:
+    path: "{{ systemd_files_location}}/{{ systemd_timer_name }}"
+  register: is_acme_letsencrypt_timer_installed
+  become_user: "{{ acme_sh_become_user }}"
+  tags:
+    - remove_templates
+
+- name: Determine if {{ systemd_service_name }} exists
+  ansible.builtin.stat:
+    path: "{{ systemd_files_location}}/{{ systemd_service_name }}"
+  register: is_acme_letsencrypt_service_installed
+  become_user: "{{ acme_sh_become_user }}"
+  tags:
+    - remove_templates
+
+- name: Remove {{ systemd_timer_name }} if it exists
+  ansible.builtin.file:
+    path: "{{ systemd_files_location}}/{{ systemd_timer_name }}"
+    state: "absent"
+  when:
+    - is_acme_letsencrypt_timer_installed.stat.exists
+  become_user: "{{ acme_sh_become_user }}"
+  tags:
+    - remove_templates
+
+- name: Remove {{ systemd_service_name }} if it exists
+  ansible.builtin.file:
+    path: "{{ systemd_files_location }}/{{ systemd_service_name }}"
+    state: "absent"
+  when:
+    - is_acme_letsencrypt_service_installed.stat.exists
+  become_user: "{{ acme_sh_become_user }}"
+  tags:
+    - remove_templates

@@ -1,0 +1,19 @@
+---
+- name: Identify which domain(s) is/are currently being removed
+  ansible.builtin.debug:
+    msg:
+      - "Removing: {{ item.domains }}"
+
+- name: Remove acme.sh certificate(s) tracked by acme.sh
+  ansible.builtin.command: >-
+    ./acme.sh --remove -d {{ item.domains | first }}
+    {{ acme_sh_default_extra_flags_remove }}
+    {{ "--debug" if item.debug | default(acme_sh_default_debug) else "" }}
+  args:
+    chdir: "{{ acme_sh_default_directory }}"
+    removes: "{{ acme_sh_default_directory }}/{{ item.domains | first }}*"
+  become_user: "{{ acme_sh_become_user }}"
+  register: remove_result
+  tags:
+    - cron_remove_domain
+  ignore_errors: true

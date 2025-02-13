@@ -1,0 +1,99 @@
+---
+
+## Notes
+# Stop Timers
+# Remove all domains tracked by acme.sh
+# Remove systemd acme.sh Timer and Service Templates
+# Remove Installed Certificates Directory
+# Uninstall Acme Remove Acme Directory
+# Remove Acme git Sources
+
+# Stop acme_letsencrypt timer
+- name: Stop acme_letsencrypt.timers
+  ansible.builtin.include_tasks:
+    file: systemd-stop-timer.yml
+    apply:
+      tags: systemd_stop_timer
+  when:
+    - acme_sh_uninstall
+    - acme_sh_uninstall|bool == true
+  tags:
+    - systemd_stop_timer
+
+# Remove all domains tracked by acme.sh
+- name: Remove all domains tracked by acme.sh
+  ansible.builtin.include_tasks:
+    file: acme-stop-tracking-certificates.yml
+  loop: "{{ acme_sh_domains }}"
+  when:
+    - acme_sh_domains and item.domains is defined and item.domains
+    - acme_sh_uninstall
+    - acme_sh_uninstall|bool == true
+  tags:
+    - cron_remove_domain
+
+# Remove systemd acme.sh Timer and Service Templates
+- name: Remove systemd Timer and Service Files
+  ansible.builtin.include_tasks:
+    file: systemd-remove-templates.yml
+  when:
+    - acme_sh_uninstall
+    - acme_sh_uninstall|bool == true
+  tags:
+    - remove_templates
+
+# Remove Installed Certificates Directory
+- name: Remove Installed Certificate Directory if it Exists
+  ansible.builtin.file:
+    path: "{{ acme_sh_copy_certs_to_path }}/{{ item.domains | first }}"
+    state: "absent"
+  when:
+    - acme_sh_uninstall
+    - acme_sh_uninstall|bool == true
+  loop: "{{ acme_sh_domains }}"
+  become_user: "{{ acme_sh_become_user }}"
+
+# Uninstall acme.sh and remove Acme Directory
+- name: Determine if acme.sh is installed
+  ansible.builtin.stat:
+    path: "{{ acme_sh_default_executable }}"
+  register: is_acme_sh_installed
+  when:
+    - acme_sh_uninstall is defined and acme_sh_uninstall|bool == true
+  become_user: "{{ acme_sh_become_user }}"
+
+- name: Uninstall acme.sh and disable all certificate renewals
+  ansible.builtin.command: ./acme.sh --uninstall
+  args:
+    chdir: "{{ acme_sh_default_directory }}"
+  when:
+    - acme_sh_uninstall is defined and acme_sh_uninstall|bool == true
+    - is_acme_sh_installed.stat.exists == true
+  become_user: "{{ acme_sh_become_user }}"
+
+- name: Remove acme directory
+  ansible.builtin.file:
+    path: "{{ acme_sh_default_directory }}"
+    state: absent
+  when:
+    - is_acme_sh_installed.stat.exists|bool == true
+    - acme_sh_uninstall is defined and acme_sh_uninstall|bool == true
+  become_user: "{{ acme_sh_become_user }}"
+
+# Remove Acme git Sources
+- name: Determine if acme.sh git repository path exists
+  ansible.builtin.stat:
+    path: "{{ acme_sh_git_clone_dest }}"
+  register: is_acme_sh_cloned_locally
+  when:
+    - acme_sh_uninstall is defined and acme_sh_uninstall|bool == true
+  become_user: "{{ acme_sh_become_user }}"
+
+- name: Remove acme.sh git repository if repository exists
+  ansible.builtin.file:
+    path: "{{ acme_sh_git_clone_dest }}"
+    state: absent
+  when:
+    - is_acme_sh_cloned_locally.stat.exists|bool == true
+    - acme_sh_uninstall is defined and acme_sh_uninstall|bool == true
+  become_user: "{{ acme_sh_become_user }}"

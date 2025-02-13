@@ -1,57 +1,85 @@
 ---
 
-acme_sh_become_user: "{{ vault_root_user | default ('root')  }} "
+# Systemd related
+systemd_files_location: "/etc/systemd/system"
+systemd_timer_name: "acme_letsencrypt.timer"
+systemd_service_name: "acme_letsencrypt.service"
 
-acme_sh_git_url: "https://github.com/acmesh-official/acme.sh"
-acme_sh_git_version: "master"
-acme_sh_git_version: "master"
-acme_sh_git_clone_dest: "/usr/local/src/acme.sh"
-acme_sh_git_clone_force: False
+# Acme.sh Related
 
-acme_sh_upgrade: True
-acme_sh_uninstall: False
+acme_sh_become_user: "{{ ansible_become_user }}"
+acme_sh_default_directory: "/root/.acme.sh"
+acme_sh_default_executable: "{{ acme_sh_default_directory }}/acme.sh"
+
+
+acme_sh_dependencies: ["cron", "git", "wget", "curl", "openssl"]
+
+acme_sh_git_version: "master"
+acme_sh_git_url: "https://github.com/acmesh-official/acme.sh.git"
+# acme_sh_git_clone_dest: "/usr/local/src/acme.sh"
+acme_sh_git_clone_dest: "/root/git/acme.sh"
+acme_sh_git_clone_force: false
+
+acme_sh_upgrade: true
+acme_sh_uninstall: false
 
 acme_sh_account_email: "{{ vault_acme_sh_account_email }}"
 
 acme_sh_renew_time_in_days: 30
 
 acme_sh_copy_certs_to_path: "/etc/ssl/letsencrypt"
+acme_sh_default_pkcs12_password: "pass"
 
-acme_sh_list_domains: True
+acme_sh_list_domains: true
 
-acme_sh_default_staging: True
+acme_sh_default_staging: true
 
-acme_sh_default_force_issue: False
-acme_sh_default_force_renew: False
+acme_sh_default_force_issue: false
+acme_sh_default_force_renew: false
 
-acme_sh_default_debug: True
+acme_sh_default_debug: false
 
 acme_sh_default_dns_provider: "dns_cf"
-acme_sh_default_dns_provider_api_keys: {}
-acme_sh_default_dns_sleep: 120
+acme_sh_default_dns_provider_api_keys:
+  "CF_Zone_ID": "{{ vault_cf_zone_id }}"
+  "CF_Token": "{{ vault_cf_token }}"
+  "CF_Email": "{{ vault_cf_email }}"
+acme_sh_default_dns_sleep: 30
 
-acme_sh_default_extra_flags_install: ""
-acme_sh_default_extra_flags_issue: ""
-acme_sh_default_extra_flags_renew: ""
-acme_sh_default_extra_flags_install_cert: ""
+acme_sh_default_extra_flags_issue: "--keylength ec-384"
+acme_sh_default_extra_flags_renew: "--ecc"
+acme_sh_default_extra_flags_remove: "--ecc"
+acme_sh_default_extra_flags_install_cert: "--ecc"
 
-acme_sh_default_install_cert_reloadcmd: "sudo service nginx reload"
+# acme_sh_default_install_cert_reloadcmd: "sudo service nginx reload"
+acme_sh_default_install_cert_reloadcmd: ""
 
 acme_sh_default_issue_pre_hook: ""
 acme_sh_default_issue_post_hook: ""
 acme_sh_default_issue_renew_hook: ""
 
-acme_sh_default_remove: False
+acme_sh_default_remove: false
 
 acme_sh_default_challenge_alias: ""
 acme_sh_default_domain_alias: ""
 
 acme_sh_default_server: "letsencrypt"
 
-acme_sh_domains: []
 
-acme_sh_enable_notify: False
-acme_sh_notify_hooks: []
-acme_sh_notify_env_var: {}
+acme_sh_enable_notify: true
+acme_sh_notify_hooks: ["mailgun"]
+acme_sh_notify_env_var:
+  "MAILGUN_API_KEY": "{{ vault_mailgun_api_key }}"
+  "MAILGUN_API_DOMAIN": "{{ vault_mailgun_api_domain }}"
+  "MAILGUN_FROM": "{{ 'acme-' + ansible_fqdn + '@' + vault_mailgun_api_domain }}"
+  "MAILGUN_TO": "{{ vault_mailgun_to }}"
 acme_sh_notify_level: 2
 acme_sh_notify_mode: 0
+
+# Domain Dynamic section - These variables most likely to be placed in host variables section
+#acme_sh_domains:
+#  - domains: ["test.gohilton.com", "test1.gohilton.com"]
+#    staging: True
+#  - domains: ["test2.gohilton.com"]
+#    staging: True
+

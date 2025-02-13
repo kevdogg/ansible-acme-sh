@@ -1,0 +1,31 @@
+---
+# Remove Non ECC Certs
+
+- name: Determine if acme.sh domain subdirectory exists
+  ansible.builtin.stat:
+    path: "{{ acme_sh_default_directory }}/{{ item.domains | first }}"
+  register: directory_result
+  become_user: "{{ acme_sh_become_user }}"
+
+- name: Remove acme.sh domain directory if it exists
+  ansible.builtin.file:
+    path: "{{ acme_sh_default_directory }}/{{ item.domains | first }}"
+    state: "absent"
+  when: directory_result.stat.exists
+  become_user: "{{ acme_sh_become_user }}"
+
+# Remove ECC Certs
+
+- name: Determine if acme.sh domain directory with ecc extension if it exits
+  ansible.builtin.stat:
+    path: "{{ acme_sh_default_directory }}/{{ item.domains | first }}_ecc"
+  register: directory_ecc_result
+  become_user: "{{ acme_sh_become_user }}"
+
+- name: Remove acme.sh domain directory with ecc extension is it exists
+  ansible.builtin.file:
+    path: "{{ acme_sh_default_directory }}/{{ item.domains | first }}_ecc"
+    state: "absent"
+  when:
+    - directory_ecc_result.stat.exists
+  become_user: "{{ acme_sh_become_user }}"

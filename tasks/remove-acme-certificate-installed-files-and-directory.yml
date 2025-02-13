@@ -1,0 +1,14 @@
+---
+- name: Determine if acme.sh domain installed directory exists
+  ansible.builtin.stat:
+    path: "{{ acme_sh_copy_certs_to_path }}/{{ item.domains | first }}"
+  register: acme_installed_directory_exists
+  become_user: "{{ acme_sh_become_user }}"
+
+- name: Remove acme.sh installed certificate directory
+  ansible.builtin.file:
+    path: "{{ acme_sh_copy_certs_to_path }}/{{ item.domains | first }}"
+    state: "absent"
+  become_user: "{{ acme_sh_become_user }}"
+  when:
+    - acme_installed_directory_exists.stat.exists

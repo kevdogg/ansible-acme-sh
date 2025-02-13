@@ -1,12 +1,22 @@
 ---
-- name: Stop acme_letsencrypt@.timer
-  ansible.builtin.systemd_servie:
-    name: "acme_letsencrypt@{{ item.domains | first }}.timer"
-    enabled: false
-    state: stopped
-    daemon_reload: true
+#- name: Stop acme_letsencrypt@.timers
+#  ansible.builtin.include_tasks:
+#    file: systemd-stop-timers.yml
+#    apply:
+#      tags: systemd_stop_timers
+#  loop: "{{ acme_sh_domains }}"
+#  when:
+#    - acme_sh_domains and item.domains is defined and item.domains
+#    - item.remove is defined and item.remove
+#  tags:
+#    - systemd_stop_timers
+
+- name: Remove certs marked for removal from certs that are tracked by acme.sh
+  ansible.builtin.include_tasks:
+    file: acme-stop-tracking-certificates.yml
   loop: "{{ acme_sh_domains }}"
   when:
     - acme_sh_domains and item.domains is defined and item.domains
     - item.remove is defined and item.remove
-  become_user: "{{ acme_sh_become_user }}"
+  tags:
+    - cron_remove_domain
