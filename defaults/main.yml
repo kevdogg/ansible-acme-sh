@@ -11,6 +11,7 @@ acme_sh_become_user: "{{ ansible_become_user }}"
 acme_sh_default_directory: "/root/.acme.sh"
 acme_sh_default_executable: "{{ acme_sh_default_directory }}/acme.sh"
 
+acme_sh_default_install_directory_permissions: "0755"
 
 acme_sh_dependencies: ["cron", "git", "wget", "curl", "openssl"]
 

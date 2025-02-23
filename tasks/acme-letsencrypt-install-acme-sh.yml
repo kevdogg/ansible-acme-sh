@@ -87,7 +87,7 @@
   args:
     chdir: "{{ acme_sh_default_directory }}"
   when:
-    - is_acme_sh_installed.stat.exists == false
+#    - is_acme_sh_installed.stat.exists == false
     - acme_sh_upgrade or acme_sh_upgrade == true
     - not acme_sh_uninstall or acme_sh_uninstall|bool == false
   register: upgrade_result
@@ -109,7 +109,7 @@
     state: "directory"
     owner: "{{ acme_sh_become_user }}"
     group: "{{ acme_sh_become_user }}"
-    mode: "0644"
+    mode: "{{ acme_sh_default_install_directory_permissions }}"
   when:
     - not acme_sh_uninstall or acme_sh_uninstall|bool == false
   become_user: "{{ acme_sh_become_user }}"

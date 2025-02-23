@@ -83,7 +83,7 @@
     state: "directory"
     group: "{{ acme_sh_become_user }}"
     owner: "{{ acme_sh_become_user }}"
-    mode: "0644"
+    mode: "{{ acme_sh_install_directory_permissions | default(acme_sh_default_install_directory_permissions) }}"
   loop: "{{ acme_sh_domains }}"
   when:
     - acme_sh_domains and item.domains is defined and item.domains
