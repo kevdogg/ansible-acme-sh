@@ -191,9 +191,13 @@
   when:
     - acme_sh_domains is defined and acme_sh_domains | length > 0
     - item.domains is defined and item.domains | length > 0
-    - item.custom_command is undefined or not item.custom_command
     - item.remove is undefined or not item.remove
     - not acme_sh_uninstall or acme_sh_uninstall|bool == false
+    - item.custom_command is undefined or not item.custom_command
+
+- name: Debug reloadcmd
+  ansible.builtin.debug:
+    var: acme_sh_domains
 
 - name: Install acme.sh certificate(s)
   ansible.builtin.shell: >- 
