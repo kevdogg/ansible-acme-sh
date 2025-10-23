@@ -158,16 +158,24 @@
   when:
     - not acme_sh_uninstall or acme_sh_uninstall|bool == false
 
-
-  # Here is command structute I'm working with openssl pkcs12 --export -out /data/technitium/config/certs/ns1.gohilton.com/pkcs12pretest.pfx -inkey /etc/ssl/letsencrypt/ns1.gohilton.com/key.pem -in /etc/ssl/letsencrypt/ns1.gohilton.com/cert.pem -certfile /etc/ssl/letsencrypt/ns1.gohilton.com/fullchain.pem --passin pass: --passout pass:tech
-- name: Add pkcs12_base_reloadcmd and combine commands into acme_reloadcmd (with all fallbacks)
+- name: Add commands only to items eligible for installation (FIXED FILTERING)
   ansible.builtin.set_fact:
     acme_sh_domains: >-
       {{
         acme_sh_domains
+        
+        # 1. FILTER: Remove items where 'remove' is defined and true
+        | rejectattr('remove')
+        
+        # 2. FILTER: Remove items where 'custom_command' is defined and not empty/false
+        #    This keeps items where custom_command is undefined OR empty/false.
+        | selectattr('custom_command', 'undefined')
+        | rejectattr('custom_command') 
+        
+        # 3. MAP: Calculate the required fields for the remaining items
         | map('combine', {
-            # 1. Define pkcs12_base_reloadcmd
-            'pkcs12_base_reloadcmd': (
+            # 0. Define temporary variable for the complex string
+            'pkcs12_cmd_str': ( 
                 openssl_path
                 ~ " pkcs12 --export"
                 ~ " -out " ~ acme_sh_copy_certs_to_path ~ "/" ~ item.domains[0] ~ "/pkcs12.pfx"
@@ -175,25 +183,27 @@
                 ~ " -in " ~ acme_sh_copy_certs_to_path ~ "/" ~ item.domains[0] ~ "/fullchain.pem"
                 ~ " --passin pass:"
                 ~ " --passout pass:" 
-                # ROBUST PASSWORD LOGIC: Fallback to acme_sh_default_pkcs12_password, then to empty string ('')
                 ~ (item.acme_sh_pkcs12_password | default(acme_sh_default_pkcs12_password) | default(''))
             ),
+            
+            # 1. Define pkcs12_base_reloadcmd
+            'pkcs12_base_reloadcmd': item.pkcs12_cmd_str,
+
             # 2. Define acme_reloadcmd
             'acme_reloadcmd': (
-                item.pkcs12_base_reloadcmd
+                item.pkcs12_cmd_str 
                 ~ ' && ' 
-                # ROBUST RELOAD CMD LOGIC: Fallback to acme_sh_default_install_cert_reloadcmd, then to 'true' (no-op)
                 ~ (item.install_cert_reloadcmd | default(acme_sh_default_install_cert_reloadcmd) | default('true'))
             )
           })
+        # 4. CLEANUP: Remove the temporary key
+        | map( 'omit', ['pkcs12_cmd_str'] ) 
         | list
       }}
   when:
+    # GLOBAL WHEN: Only run the task if the list exists and the uninstall flag is false
     - acme_sh_domains is defined and acme_sh_domains | length > 0
-#    - item.domains is defined and item.domains | length > 0
-#    - item.remove is undefined or not item.remove
     - not acme_sh_uninstall or acme_sh_uninstall|bool == false
-    - item.custom_command is undefined or not item.custom_command
 
 - name: Debug reloadcmd
   ansible.builtin.debug:
