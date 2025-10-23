@@ -196,7 +196,6 @@
         acme_sh_domains
         | map('combine', {
             'acme_reloadcmd': (
-              {# This safely references the key added in the previous task #}
               item.pkcs12_base_reloadcmd 
               ~ " && "
               ~ (item.install_cert_reloadcmd | default(acme_sh_default_install_cert_reloadcmd) | default('true'))
