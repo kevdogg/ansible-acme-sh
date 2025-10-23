@@ -122,6 +122,8 @@
   register: which_openssl_result
   failed_when: which_openssl_result.rc != 0 and 'no openssl in' not in which_openssl_result.stderr
   changed_when: false # Discovery tasks should not report change
+  when:
+    - not acme_sh_uninstall or acme_sh_uninstall|bool == false
 
 - name: Set fact for openssl path with fallback
   ansible.builtin.set_fact:
@@ -130,6 +132,8 @@
         (which_openssl_result.rc == 0)
         | ternary(which_openssl_result.stdout | trim, '/usr/bin/openssl')
       }}
+  when:
+    - not acme_sh_uninstall or acme_sh_uninstall|bool == false
 
 - name: Determine bash executable path
   ansible.builtin.command: which bash
@@ -137,6 +141,8 @@
   # Use a simple failed_when to ensure 'bash' was found
   failed_when: bash_path_result.rc != 0
   changed_when: false
+  when:
+    - not acme_sh_uninstall or acme_sh_uninstall|bool == false
 
 - name: Set bash_executable_path fact with ternary fallback
   ansible.builtin.set_fact:
@@ -145,6 +151,10 @@
         bash_path_result.rc == 0 
         | ternary(bash_path_result.stdout | trim, '/usr/bin/bash') 
       }}
+  when:
+    - not acme_sh_uninstall or acme_sh_uninstall|bool == false
+
+
   # Here is command structute I'm working with openssl pkcs12 --export -out /data/technitium/config/certs/ns1.gohilton.com/pkcs12pretest.pfx -inkey /etc/ssl/letsencrypt/ns1.gohilton.com/key.pem -in /etc/ssl/letsencrypt/ns1.gohilton.com/cert.pem -certfile /etc/ssl/letsencrypt/ns1.gohilton.com/fullchain.pem --passin pass: --passout pass:tech
 - name: Add pkcs12_base_reloadcmd and combine commands into acme_reloadcmd (with all fallbacks)
   ansible.builtin.set_fact:
