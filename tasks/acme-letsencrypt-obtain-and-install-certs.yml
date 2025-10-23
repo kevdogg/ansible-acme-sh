@@ -207,8 +207,6 @@
   loop: "{{ acme_sh_domains }}"
   loop_control:
     label: "Combining commands for {{ item.domains | first }}"
-    
-  # Use the same exact filtering logic for consistency
   when:
     # We only need to check if the base command was successfully added in the previous step
     # and confirm the core filters.
