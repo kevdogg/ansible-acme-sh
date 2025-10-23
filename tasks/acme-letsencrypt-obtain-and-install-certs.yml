@@ -36,13 +36,14 @@
   environment: "{{ item.dns_provider_api_keys | default(acme_sh_default_dns_provider_api_keys) }}"
   loop: "{{ acme_sh_domains }}"
   when:
-    - acme_sh_domains and item.domains is defined and item.domains
-    - item.dns_provider | default(acme_sh_default_dns_provider)
-    - item.dns_provider_api_keys | default(acme_sh_default_dns_provider_api_keys)
-    - item.force_renew is undefined or not item.force_renew
-    - item.custom_command is undefined or not item.custom_command
+    - acme_sh_domains is defined and acme_sh_domains | length > 0
+    - items.domains is defined and item.domains | length > 0
+    - (item.dns_provider | default(acme_sh_default_dns_provider)) | length > 0
+    - (item.dns_provider_api_keys | default(acme_sh_default_dns_provider_api_keys)) > length > 0
     - item.remove is undefined or not item.remove
     - not acme_sh_uninstall or acme_sh_uninstall|bool == false
+    - item.force_renew is undefined or not item.force_renew
+    - item.custom_command is undefined or not item.custom_command
   become_user: "{{ acme_sh_become_user }}"
   register: issue_result
   changed_when: issue_result.rc == 0 and "Cert success" in issue_result.stdout
@@ -68,7 +69,8 @@
     chdir: "{{ acme_sh_default_directory }}"
   loop: "{{ acme_sh_domains }}"
   when:
-    - acme_sh_domains and item.domains is defined and item.domains
+    - acme_sh_domains is defined and acme_sh_domains | length > 0
+    - items.domains is defined and item.domains | length > 0
     - item.force_issue is undefined or not item.force_issue
     - item.force_renew is defined and item.force_renew
     - item.remove is undefined or not item.remove
@@ -87,7 +89,8 @@
     mode: "{{ acme_sh_install_directory_permissions | default(acme_sh_default_install_directory_permissions) }}"
   loop: "{{ acme_sh_domains }}"
   when:
-    - acme_sh_domains and item.domains is defined and item.domains
+    - acme_sh_domains is defined and acme_sh_domains | length > 0
+    - items.domains is defined and item.domains | length > 0
     - item.custom_command is undefined or not item.custom_command
     - item.remove is undefined or not item.remove
     - not acme_sh_uninstall or acme_sh_uninstall|bool == false
@@ -187,6 +190,7 @@
       }}
   when:
     - acme_sh_domains is defined and acme_sh_domains | length > 0
+    - items.domains is defined and item.domains | length > 0
     - item.custom_command is undefined or not item.custom_command
     - item.remove is undefined or not item.remove
     - not acme_sh_uninstall or acme_sh_uninstall|bool == false
@@ -211,7 +215,8 @@
     index_var: domains_index
     extended: true
   when:
-    - acme_sh_domains and item.domains is defined and item.domains
+    - acme_sh_domains is defined and acme_sh_domains | length > 0
+    - items.domains is defined and item.domains | length > 0
     - item.custom_command is undefined or not item.custom_command
     - item.remove is undefined or not item.remove
     - not acme_sh_uninstall or acme_sh_uninstall|bool == false
