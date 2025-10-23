@@ -7,7 +7,7 @@
   loop: "{{ acme_sh_domains }}"
   when:
     - acme_sh_domains is defined and acme_sh_domains | length > 0
-    - items.domains is defined and item.domains | length > 0
+    - item.domains is defined and item.domains | length > 0
     - (item.dns_provider | default(acme_sh_default_dns_provider)) | length > 0
     - (item.dns_provider_api_keys | default(acme_sh_default_dns_provider_api_keys)) > length > 0
     - item.custom_command is defined and item.custom_command | length > 0
@@ -37,7 +37,7 @@
   loop: "{{ acme_sh_domains }}"
   when:
     - acme_sh_domains is defined and acme_sh_domains | length > 0
-    - items.domains is defined and item.domains | length > 0
+    - item.domains is defined and item.domains | length > 0
     - (item.dns_provider | default(acme_sh_default_dns_provider)) | length > 0
     - (item.dns_provider_api_keys | default(acme_sh_default_dns_provider_api_keys)) > length > 0
     - item.remove is undefined or not item.remove
@@ -70,7 +70,7 @@
   loop: "{{ acme_sh_domains }}"
   when:
     - acme_sh_domains is defined and acme_sh_domains | length > 0
-    - items.domains is defined and item.domains | length > 0
+    - item.domains is defined and item.domains | length > 0
     - item.force_issue is undefined or not item.force_issue
     - item.force_renew is defined and item.force_renew
     - item.remove is undefined or not item.remove
@@ -90,7 +90,7 @@
   loop: "{{ acme_sh_domains }}"
   when:
     - acme_sh_domains is defined and acme_sh_domains | length > 0
-    - items.domains is defined and item.domains | length > 0
+    - item.domains is defined and item.domains | length > 0
     - item.custom_command is undefined or not item.custom_command
     - item.remove is undefined or not item.remove
     - not acme_sh_uninstall or acme_sh_uninstall|bool == false
@@ -190,7 +190,7 @@
       }}
   when:
     - acme_sh_domains is defined and acme_sh_domains | length > 0
-    - items.domains is defined and item.domains | length > 0
+    - item.domains is defined and item.domains | length > 0
     - item.custom_command is undefined or not item.custom_command
     - item.remove is undefined or not item.remove
     - not acme_sh_uninstall or acme_sh_uninstall|bool == false
@@ -216,7 +216,7 @@
     extended: true
   when:
     - acme_sh_domains is defined and acme_sh_domains | length > 0
-    - items.domains is defined and item.domains | length > 0
+    - item.domains is defined and item.domains | length > 0
     - item.custom_command is undefined or not item.custom_command
     - item.remove is undefined or not item.remove
     - not acme_sh_uninstall or acme_sh_uninstall|bool == false
