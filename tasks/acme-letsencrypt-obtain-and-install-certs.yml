@@ -9,7 +9,7 @@
     - acme_sh_domains is defined and acme_sh_domains | length > 0
     - item.domains is defined and item.domains | length > 0
     - (item.dns_provider | default(acme_sh_default_dns_provider)) | length > 0
-    - (item.dns_provider_api_keys | default(acme_sh_default_dns_provider_api_keys)) > length > 0
+    - (item.dns_provider_api_keys | default(acme_sh_default_dns_provider_api_keys)) | length > 0
     - item.custom_command is defined and item.custom_command | length > 0
     - item.remove is undefined or not item.remove
     - not acme_sh_uninstall or acme_sh_uninstall|bool == false
@@ -39,7 +39,7 @@
     - acme_sh_domains is defined and acme_sh_domains | length > 0
     - item.domains is defined and item.domains | length > 0
     - (item.dns_provider | default(acme_sh_default_dns_provider)) | length > 0
-    - (item.dns_provider_api_keys | default(acme_sh_default_dns_provider_api_keys)) > length > 0
+    - (item.dns_provider_api_keys | default(acme_sh_default_dns_provider_api_keys)) | length > 0
     - item.remove is undefined or not item.remove
     - not acme_sh_uninstall or acme_sh_uninstall|bool == false
     - item.force_renew is undefined or not item.force_renew
