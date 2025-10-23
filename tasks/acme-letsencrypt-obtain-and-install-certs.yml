@@ -7,8 +7,8 @@
   loop: "{{ acme_sh_domains }}"
   when:
     - acme_sh_domains and item.domains is defined and item.domains
-    - item.dns_provider | default(acme_sh_default_dns_provider)
-    - item.dns_provider_api_keys | default(acme_sh_default_dns_provider_api_keys)
+    - (item.dns_provider | default(acme_sh_default_dns_provider)) | length > 0
+    - (item.dns_provider_api_keys | default(acme_sh_default_dns_provider_api_keys)) > length > 0
     - item.custom_command is defined and item.custom_command
     - item.remove is undefined or not item.remove
     - not acme_sh_uninstall or acme_sh_uninstall|bool == false
