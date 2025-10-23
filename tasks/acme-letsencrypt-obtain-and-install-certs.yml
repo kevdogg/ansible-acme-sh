@@ -92,18 +92,109 @@
     - not acme_sh_uninstall or acme_sh_uninstall|bool == false
   become_user: "{{ acme_sh_become_user }}"
 
+#- name: Create pcks12 file using acme technique -- This function requires a password to be set
+#  ansible.builtin.command: >-
+#    ./acme.sh --to-pkcs12 --domain {{ item.domains | first }}
+#    {{ "--password " + item.acme_sh_pkcs12_password | default(acme_sh_default_pkcs12_password) if item.acme_sh_pkcs12_password | (acme_sh_default_pkcs12_password is defined and acme_sh_default_pkcs12_password is not none and acme_sh_default_pkcs12_password | length) else "pass" }}
+#  loop: "{{ acme_sh_domains }}"
+#  when:
+#    - (item.acme_sh_pkcs12_password is defined and item.acme_sh_pkcs12_password is not not and item.acme_sh_pkcs12_password | length) or (acme_sh_default_pkcs12_password is defined and acme_sh_default_pkcs12_password is not none and acme_sh_default_pkcs12_password | length)
+#  become_user: "{{ acme_sh_become_user }}"
+#  register: pkcs12_create_result
+#
+#- name: Install ReloadCmd Template to install pkcs12.file
+#  ansible.builtin.template:
+#    src: pkcs12.sh.j2
+#    dest: "{{ acme
+#    force: true
+#    owner: root
+#    group: root
+#    mode: 0755
+#  when:
+#    - not acme_sh_uninstall or acme_sh_uninstall|bool == false
+#  become_user: "{{ acme_sh_become_user }}"
+
+
+- name: Locate openssl executable
+  ansible.builtin.command: which openssl
+  become_user: "{{ acme_sh_become_user }}"
+  ignore_errors: true
+  register: which_openssl_result
+  failed_when: which_openssl_result.rc != 0 and 'no openssl in' not in which_openssl_result.stderr
+  changed_when: false # Discovery tasks should not report change
+
+- name: Set fact for openssl path with fallback
+  ansible.builtin.set_fact:
+    openssl_path: >-
+      {{
+        (which_openssl_result.rc == 0)
+        | ternary(which_openssl_result.stdout | trim, '/usr/bin/openssl')
+      }}
+
+- name: Determine bash executable path
+  ansible.builtin.command: which bash
+  register: bash_path_result
+  # Use a simple failed_when to ensure 'bash' was found
+  failed_when: bash_path_result.rc != 0
+  changed_when: false
+
+- name: Set bash_executable_path fact with ternary fallback
+  ansible.builtin.set_fact:
+    bash_executable_path: >-
+      {{ 
+        bash_path_result.rc == 0 
+        | ternary(bash_path_result.stdout | trim, '/usr/bin/bash') 
+      }}
+  # Here is command structute I'm working with openssl pkcs12 --export -out /data/technitium/config/certs/ns1.gohilton.com/pkcs12pretest.pfx -inkey /etc/ssl/letsencrypt/ns1.gohilton.com/key.pem -in /etc/ssl/letsencrypt/ns1.gohilton.com/cert.pem -certfile /etc/ssl/letsencrypt/ns1.gohilton.com/fullchain.pem --passin pass: --passout pass:tech
+- name: Add pkcs12_base_reloadcmd and combine commands into acme_reloadcmd (with all fallbacks)
+  ansible.builtin.set_fact:
+    acme_sh_domains: >-
+      {{
+        acme_sh_domains
+        | map('combine', {
+            # 1. Define pkcs12_base_reloadcmd
+            'pkcs12_base_reloadcmd': (
+                openssl_path
+                ~ " pkcs12 --export"
+                ~ " -out " ~ acme_sh_copy_certs_to_path ~ "/" ~ item.domains[0] ~ "/pkcs12.pfx"
+                ~ " -inkey " ~ acme_sh_copy_certs_to_path ~ "/" ~ item.domains[0] ~ "/key.pem"
+                ~ " -in " ~ acme_sh_copy_certs_to_path ~ "/" ~ item.domains[0] ~ "/fullchain.pem"
+                ~ " --passin pass:"
+                ~ " --passout pass:" 
+                # ROBUST PASSWORD LOGIC: Fallback to acme_sh_default_pkcs12_password, then to empty string ('')
+                ~ (item.acme_sh_pkcs12_password | default(acme_sh_default_pkcs12_password) | default(''))
+            ),
+            # 2. Define acme_reloadcmd
+            'acme_reloadcmd': (
+                item.pkcs12_base_reloadcmd
+                ~ ' && ' 
+                # ROBUST RELOAD CMD LOGIC: Fallback to acme_sh_default_install_cert_reloadcmd, then to 'true' (no-op)
+                ~ (item.install_cert_reloadcmd | default(acme_sh_default_install_cert_reloadcmd) | default('true'))
+            )
+          })
+        | list
+      }}
+  when:
+    - acme_sh_domains is defined and acme_sh_domains | length > 0
+    - item.custom_command is undefined or not item.custom_command
+    - item.remove is undefined or not item.remove
+    - not acme_sh_uninstall or acme_sh_uninstall|bool == false
+
 - name: Install acme.sh certificate(s)
-  ansible.builtin.command: >-
+  ansible.builtin.shell: >- 
     ./acme.sh --install-cert -d {{ item.domains | first }}
     --key-file {{ acme_sh_copy_certs_to_path }}/{{ item.domains | first }}/key.pem
     --fullchain-file {{ acme_sh_copy_certs_to_path }}/{{ item.domains | first }}/fullchain.pem
     --ca-file {{ acme_sh_copy_certs_to_path }}/{{ item.domains | first }}/ca.pem
     --cert-file {{ acme_sh_copy_certs_to_path }}/{{ item.domains | first }}/cert.pem
-    --reloadcmd "{{ item.install_cert_reloadcmd | default(acme_sh_default_install_cert_reloadcmd) }}"
-    {{ "--debug" if item.debug | default(acme_sh_default_debug) else "" }}
-    {{ item.extra_flags_install_cert | default(acme_sh_default_extra_flags_install_cert) }}
+    
+    --reloadcmd "{{ item.acme_reloadcmd }}"
+    
+    {{ ("--debug" if item.debug | default(acme_sh_default_debug) else "") }}
+    {{ item.extra_flags_install_cert | default(acme_sh_default_extra_flags_install_cert, '') }}
   args:
     chdir: "{{ acme_sh_default_directory }}"
+    executable: "{{ bash_executable_path }}" 
   loop: "{{ acme_sh_domains }}"
   loop_control:
     index_var: domains_index
@@ -118,27 +209,20 @@
   changed_when: issue_result.results[domains_index].changed or renew_result.results[domains_index].changed
   failed_when: install_cert_result.rc != 0 and "Reload error for" not in install_cert_result.stderr
 
-- name: Locate openssl executable
-  ansible.builtin.command: which openssl
-  become_user: "{{ acme_sh_become_user }}"
-  ignore_errors: true
-  register: which_openssl_result
-  failed_when: which_openssl_result.rc != 0 and "no openssl in" not in which_openssl_result.stderr
-
-- name: pkcs12_file_block
-  ansible.builtin.include_tasks:
-    file: acme-pkcs12-file.yml
-    apply:
-      tags: pkcs12
-  loop: "{{ acme_sh_domains }}"
-  when:
-    - acme_sh_domains and item.domains is defined and item.domains
-    - item.custom_command is undefined or not item.custom_command
-    - item.remove is undefined or not item.remove
-    - not acme_sh_uninstall or acme_sh_uninstall|bool == false
-    - which_openssl_result.rc == 0
-  tags:
-    - pkcs12
+#- name: pkcs12_file_block
+#  ansible.builtin.include_tasks:
+#    file: acme-pkcs12-file.yml
+#    apply:
+#      tags: pkcs12
+#  loop: "{{ acme_sh_domains }}"
+#  when:
+#    - acme_sh_domains and item.domains is defined and item.domains
+#    - item.custom_command is undefined or not item.custom_command
+#    - item.remove is undefined or not item.remove
+#    - not acme_sh_uninstall or acme_sh_uninstall|bool == false
+#    - which_openssl_result.rc == 0
+#  tags:
+#    - pkcs12
 
 #- name:  Determine if there exists a pkcs12.pfx file already installed
 #  ansible.builtin.stat:

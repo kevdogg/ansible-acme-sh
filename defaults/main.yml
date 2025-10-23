@@ -53,6 +53,7 @@ acme_sh_default_extra_flags_remove: "--ecc"
 acme_sh_default_extra_flags_install_cert: "--ecc"
 
 # acme_sh_default_install_cert_reloadcmd: "sudo service nginx reload"
+#acme_sh_default_install_pkcs12_template_path: "/usr/local/bin/pkcs12.sh"
 acme_sh_default_install_cert_reloadcmd: ""
 
 acme_sh_default_issue_pre_hook: ""
