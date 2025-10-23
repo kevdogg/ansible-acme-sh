@@ -164,17 +164,12 @@
       {{
         acme_sh_domains
         
-        # 1. FILTER: Remove items where 'remove' is defined and true
         | rejectattr('remove')
-        
-        # 2. FILTER: Remove items where 'custom_command' is defined and not empty/false
-        #    This keeps items where custom_command is undefined OR empty/false.
         | selectattr('custom_command', 'undefined')
         | rejectattr('custom_command') 
         
-        # 3. MAP: Calculate the required fields for the remaining items
         | map('combine', {
-            # 0. Define temporary variable for the complex string
+            
             'pkcs12_cmd_str': ( 
                 openssl_path
                 ~ " pkcs12 --export"
@@ -186,22 +181,18 @@
                 ~ (item.acme_sh_pkcs12_password | default(acme_sh_default_pkcs12_password) | default(''))
             ),
             
-            # 1. Define pkcs12_base_reloadcmd
             'pkcs12_base_reloadcmd': item.pkcs12_cmd_str,
 
-            # 2. Define acme_reloadcmd
             'acme_reloadcmd': (
                 item.pkcs12_cmd_str 
                 ~ ' && ' 
                 ~ (item.install_cert_reloadcmd | default(acme_sh_default_install_cert_reloadcmd) | default('true'))
             )
           })
-        # 4. CLEANUP: Remove the temporary key
         | map( 'omit', ['pkcs12_cmd_str'] ) 
         | list
       }}
   when:
-    # GLOBAL WHEN: Only run the task if the list exists and the uninstall flag is false
     - acme_sh_domains is defined and acme_sh_domains | length > 0
     - not acme_sh_uninstall or acme_sh_uninstall|bool == false
 
