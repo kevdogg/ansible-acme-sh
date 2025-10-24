@@ -152,7 +152,7 @@
   ansible.builtin.set_fact:
     bash_executable_path: >-
       {{ 
-        bash_path_result.rc == 0 
+        (bash_path_result.rc == 0)
         | ternary(bash_path_result.stdout | trim, '/usr/bin/bash') 
       }}
   when:
