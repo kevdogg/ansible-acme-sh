@@ -227,10 +227,8 @@
     --fullchain-file {{ acme_sh_copy_certs_to_path }}/{{ item.domains | first }}/fullchain.pem
     --ca-file {{ acme_sh_copy_certs_to_path }}/{{ item.domains | first }}/ca.pem
     --cert-file {{ acme_sh_copy_certs_to_path }}/{{ item.domains | first }}/cert.pem
-    
     --reloadcmd "{{ item.acme_reloadcmd }}"
-    
-    {{ ("--debug" if item.debug | default(acme_sh_default_debug) else "") }}
+    {{ ("--debug" if item.debug | default(acme_sh_default_debug, False) | bool else "") }}
     {{ item.extra_flags_install_cert | default(acme_sh_default_extra_flags_install_cert, '') }}
   args:
     chdir: "{{ acme_sh_default_directory }}"
