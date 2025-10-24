@@ -220,19 +220,30 @@
   ansible.builtin.debug:
     var: acme_sh_domains
 
+- name: Debug bash_executable_path
+  ansible.builtin.debug:
+    var: bash_executable_path
+
 - name: Install acme.sh certificate(s)
-  ansible.builtin.shell: >- 
-    ./acme.sh --install-cert -d {{ item.domains | first }}
-    --key-file {{ acme_sh_copy_certs_to_path }}/{{ item.domains | first }}/key.pem
-    --fullchain-file {{ acme_sh_copy_certs_to_path }}/{{ item.domains | first }}/fullchain.pem
-    --ca-file {{ acme_sh_copy_certs_to_path }}/{{ item.domains | first }}/ca.pem
-    --cert-file {{ acme_sh_copy_certs_to_path }}/{{ item.domains | first }}/cert.pem
-    --reloadcmd "{{ item.acme_reloadcmd }}"
-    {{ ("--debug" if item.debug | default(acme_sh_default_debug | default (False)) | bool else "") }}
-    {{ item.extra_flags_install_cert | default(acme_sh_default_extra_flags_install_cert | default('')) }}
+  ansible.builtin.shell: >-
+    {{ 
+      './acme.sh --install-cert -d ' ~ item.domains | first ~
+      ' --key-file ' ~ acme_sh_copy_certs_to_path ~ '/' ~ item.domains | first ~ '/key.pem' ~
+      ' --fullchain-file ' ~ acme_sh_copy_certs_to_path ~ '/' ~ item.domains | first ~ '/fullchain.pem' ~
+      ' --ca-file ' ~ acme_sh_copy_certs_to_path ~ '/' ~ item.domains | first ~ '/ca.pem' ~
+      ' --cert-file ' ~ acme_sh_copy_certs_to_path ~ '/' ~ item.domains | first ~ '/cert.pem' ~
+      ' --reloadcmd "' ~ item.acme_reloadcmd ~ '"' ~
+      
+      # Debug Flag: Ensure space is inside the string if True, or empty if False
+      ( " --debug" if item.debug | default(acme_sh_default_debug | default (False)) | bool else "") ~ 
+      
+      # Extra Flags: Ensure a single leading space is present before the flags
+      ' ' ~ item.extra_flags_install_cert | default(acme_sh_default_extra_flags_install_cert | default(''))
+    }}
   args:
     chdir: "{{ acme_sh_default_directory }}"
-    executable: "{{ bash_executable_path }}" 
+    executable: "{{ bash_executable_path }}"
+  # ... rest of task
   loop: "{{ acme_sh_domains }}"
   loop_control:
     index_var: domains_index
