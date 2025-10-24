@@ -47,7 +47,7 @@ acme_sh_default_dns_provider_api_keys:
   "CF_Email": "{{ vault_cf_email }}"
 acme_sh_default_dns_sleep: 30
 
-acme_sh_default_extra_flags_issue: "--keylength ec-384"
+acme_sh_default_extra_flags_issue: "--keylength ec-384 --ecc"
 acme_sh_default_extra_flags_renew: "--ecc"
 acme_sh_default_extra_flags_remove: "--ecc"
 acme_sh_default_extra_flags_install_cert: "--ecc"

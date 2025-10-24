@@ -1,14 +1,33 @@
+- name: Determine bash executable path
+  ansible.builtin.command: which bash
+  register: bash_path_result
+  # Use a simple failed_when to ensure 'bash' was found
+  failed_when: bash_path_result.rc != 0
+  changed_when: false
+  when:
+    - not acme_sh_uninstall or acme_sh_uninstall|bool == false
+
+- name: Set bash_executable_path fact with ternary fallback
+  ansible.builtin.set_fact:
+    bash_executable_path: >-
+      {{ 
+        (bash_path_result.rc == 0)
+        | ternary(bash_path_result.stdout | trim, '/usr/bin/bash') 
+      }}
+  when:
+    - not acme_sh_uninstall or acme_sh_uninstall|bool == false
 
 - name: Run custom acme.sh command
-  ansible.builtin.command: ./acme.sh {{ item.custom_command }}
+  ansible.builtin.shell: ./acme.sh {{ item.custom_command }}
   args:
     chdir: "{{ acme_sh_default_directory }}"
-  environment: "{{ item.dns_provider_api_keys | default(acme_sh_default_dns_provider_api_keys) }}"
+    executable: "{{ bash_executable_path }}"
+  environment: "{{ item.dns_provider_api_keys | default(acme_sh_default_dns_provider_api_keys | default({})) }}"
   loop: "{{ acme_sh_domains }}"
   when:
     - acme_sh_domains is defined and acme_sh_domains | length > 0
     - item.domains is defined and item.domains | length > 0
-    - (item.dns_provider | default(acme_sh_default_dns_provider)) | length > 0
+    - (item.dns_provider | default(acme_sh_default_dns_provider | default('dns_cf'))) | length > 0
     - (item.dns_provider_api_keys | default(acme_sh_default_dns_provider_api_keys)) | length > 0
     - item.custom_command is defined and item.custom_command | length > 0
     - item.remove is undefined or not item.remove
@@ -17,25 +36,39 @@
   tags: custom_command
 
 - name: Issue acme.sh certificate(s) (this will sleep for dns_sleep seconds)
-  ansible.builtin.command: >-
-    ./acme.sh --issue -d {{ item.domains | join(" -d ") }}
-    {{ acme_sh_extra_flags_issue | default(acme_sh_default_extra_flags_issue) }}
-    --dns {{ item.dns_provider | default(acme_sh_default_dns_provider) }}
-    --dnssleep {{ item.dns_sleep | default(acme_sh_default_dns_sleep) }}
-    {{ "--domain-alias" if item.domain_alias | default(acme_sh_default_domain_alias|default("")) else ""}}
-    {{ "--challenge-alias " + '"' + item.challenge_alias | default(acme_sh_default_challenge_aliass) + '"' if item.challenge_alias | default(acme_sh_default_challenge_aliass|default("")) else "" }}
-    {{ "--force" if item.force_issue | default(acme_sh_default_force_issue) else "" }}
-    {{ "--staging" if item.staging | default(acme_sh_default_staging) else "" }}
-    {{ "--debug" if item.debug | default(acme_sh_default_debug) else "" }}
-    {{ "--pre-hook " + '"' + item.issue_pre_hook | default(acme_sh_default_issue_pre_hook) + '"' if item.issue_pre_hook | default(acme_sh_default_issue_pre_hook) else "" }}
-    {{ "--post-hook " + '"' + item.issue_post_hook | default(acme_sh_default_issue_post_hook) + '"' if item.issue_post_hook | default(acme_sh_default_issue_post_hook) else "" }}
-    {{ "--renew-hook " + '"' + item.issue_renew_hook | default(acme_sh_default_issue_renew_hook) + '"' if item.issue_renew_hook | default(acme_sh_default_issue_renew_hook) else "" }}
-    {{ item.extra_flags_issue | default(acme_sh_default_extra_flags_issue) }}
+  ansible.builtin.shell: >-
+    {{ 
+      './acme.sh --issue -d ' ~ item.domains | join(' -d ') ~
+      ' --dns ' ~ item.dns_provider | default(acme_sh_default_dns_provider | default('dns_cf')) ~
+      ' --dnssleep ' ~ item.dns_sleep | default(acme_sh_default_dns_sleep | default('30')) | string ~
+      
+      ( " --domain-alias" if item.domain_alias | default(acme_sh_default_domain_alias | default(False)) | bool else "" ) ~
+      
+      ( " --challenge-alias \"" ~ item.challenge_alias | default(acme_sh_default_challenge_alias) ~ '"' 
+        if item.challenge_alias | default(acme_sh_default_challenge_alias | default('')) else "" ) ~
+      
+      ( " --force" if item.force_issue | default(acme_sh_default_force_issue | default(False)) | bool else "" ) ~
+      ( " --staging" if item.staging | default(acme_sh_default_staging | default(False)) | bool else "" ) ~
+      ( " --debug" if item.debug | default(acme_sh_default_debug | default(False)) | bool else "" ) ~
+      
+      ( " --pre-hook \"" ~ item.issue_pre_hook | default(acme_sh_default_issue_pre_hook) ~ '"' 
+        if item.issue_pre_hook | default(acme_sh_default_issue_pre_hook | default('')) else "" ) ~
+        
+      ( " --post-hook \"" ~ item.issue_post_hook | default(acme_sh_default_issue_post_hook) ~ '"' 
+        if item.issue_post_hook | default(acme_sh_default_issue_post_hook | default('')) else "" ) ~
+        
+      ( " --renew-hook \"" ~ item.issue_renew_hook | default(acme_sh_default_issue_renew_hook) ~ '"' 
+        if item.issue_renew_hook | default(acme_sh_default_issue_renew_hook | default('')) else "" ) ~
+        
+      ( " " ~ item.extra_flags_issue | default(acme_sh_default_extra_flags_issue | default('--keylength ec-384 --ecc')) )
+    }}
   args:
     chdir: "{{ acme_sh_default_directory }}"
-  environment: "{{ item.dns_provider_api_keys | default(acme_sh_default_dns_provider_api_keys) }}"
+    executable: "{{ bash_executable_path }}"
+  environment: "{{ item.dns_provider_api_keys | default(acme_sh_default_dns_provider_api_keys | default({})) }}"
   loop: "{{ acme_sh_domains }}"
   when:
+    # ... (when conditions remain unchanged) ...
     - acme_sh_domains is defined and acme_sh_domains | length > 0
     - item.domains is defined and item.domains | length > 0
     - (item.dns_provider | default(acme_sh_default_dns_provider)) | length > 0
@@ -61,12 +94,17 @@
 #  loop: "{{ issue_result.results }}"
 
 - name: Force renew acme.sh certificate(s)
-  ansible.builtin.command: >-
-    ./acme.sh --renew -d {{ item.domains | first }} --force
-    {{ "--debug" if item.debug | default(acme_sh_default_debug) else "" }}
-    {{ item.extra_flags_renew | default(acme_sh_default_extra_flags_renew) }}
+  ansible.builtin.shell: >-
+    {{
+      './acme.sh --renew -d ' ~ item.domains | first ~ ' --force' ~
+      
+      ( " --debug" if item.debug | default(acme_sh_default_debug | default(False)) | bool else "" ) ~
+      
+      ( " " ~ item.extra_flags_renew | default(acme_sh_default_extra_flags_renew | default('--ecc')) )
+    }}
   args:
     chdir: "{{ acme_sh_default_directory }}"
+    executable: "{{ bash_executable_path }}"
   loop: "{{ acme_sh_domains }}"
   when:
     - acme_sh_domains is defined and acme_sh_domains | length > 0
@@ -139,24 +177,6 @@
   when:
     - not acme_sh_uninstall or acme_sh_uninstall|bool == false
 
-- name: Determine bash executable path
-  ansible.builtin.command: which bash
-  register: bash_path_result
-  # Use a simple failed_when to ensure 'bash' was found
-  failed_when: bash_path_result.rc != 0
-  changed_when: false
-  when:
-    - not acme_sh_uninstall or acme_sh_uninstall|bool == false
-
-- name: Set bash_executable_path fact with ternary fallback
-  ansible.builtin.set_fact:
-    bash_executable_path: >-
-      {{ 
-        (bash_path_result.rc == 0)
-        | ternary(bash_path_result.stdout | trim, '/usr/bin/bash') 
-      }}
-  when:
-    - not acme_sh_uninstall or acme_sh_uninstall|bool == false
 
 - name:  Add pkcs12_base_reloadcmd to acme_sh_domains
   ansible.builtin.set_fact:
@@ -216,13 +236,13 @@
     - item.custom_command is undefined or not item.custom_command
     - not acme_sh_uninstall or acme_sh_uninstall|bool == false
 
-- name: Debug reloadcmd
-  ansible.builtin.debug:
-    var: acme_sh_domains
-
-- name: Debug bash_executable_path
-  ansible.builtin.debug:
-    var: bash_executable_path
+#- name: Debug reloadcmd
+#  ansible.builtin.debug:
+#    var: acme_sh_domains
+#
+#- name: Debug bash_executable_path
+#  ansible.builtin.debug:
+#    var: bash_executable_path
 
 - name: Install acme.sh certificate(s)
   ansible.builtin.shell: >-

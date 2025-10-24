@@ -6,9 +6,11 @@
 
 - name: Remove acme.sh certificate(s) tracked by acme.sh
   ansible.builtin.command: >-
-    ./acme.sh --remove -d {{ item.domains | first }}
-    {{ acme_sh_default_extra_flags_remove }}
-    {{ "--debug" if item.debug | default(acme_sh_default_debug) else "" }}
+    {{ 
+      './acme.sh --remove -d ' ~ item.domains | first ~ 
+      ( " " ~ item.extra_flags_remove | default(acme_sh_default_extra_flags_remove | default('')) ) ~
+      ( " --debug" if item.debug | default(acme_sh_default_debug | default(False)) | bool else "" )
+    }}
   args:
     chdir: "{{ acme_sh_default_directory }}"
     removes: "{{ acme_sh_default_directory }}/{{ item.domains | first }}*"
