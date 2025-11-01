@@ -69,8 +69,9 @@
         tags: acme_remove_domain
     loop: "{{ acme_sh_domains }}"
     when:
-      - acme_sh_domains and item.domains is defined and item.domains
-      - item.remove is defined and item.remove
+      - acme_sh_domains is defined and acme_sh_domains | length > 0
+      - item.domains is defined and item.domains | length > 0
+      - item.remove is defined and item.remove | length > 0
     tags:
       - acme_remove_domain
 
@@ -80,8 +81,9 @@
       apply:
         tags: remove_selected_certificates
     when:
-      - acme_sh_domains and item.domains is defined and item.domains
-      - item.remove is defined and item.remove
+      - acme_sh_domains is defined and acme_sh_domains | length > 0
+      - item.domains is defined and item.domains | length > 0
+      - item.remove is defined and item.remove | length > 0
       - not acme_sh_uninstall or acme_sh_uninstall|bool == false
     loop: "{{ acme_sh_domains }}"
     tags: remove_selected_certificates
