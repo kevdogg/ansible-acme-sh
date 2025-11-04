@@ -5,7 +5,8 @@
     msg: item
   loop: "{{ acme_sh_domains }}" 
   become_user: "{{ acme_sh_become_user }}"
-  tags: debug
+  tags:
+    - debug
 
 - name: Install Block
   block:

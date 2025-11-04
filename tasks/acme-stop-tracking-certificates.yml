@@ -3,6 +3,8 @@
   ansible.builtin.debug:
     msg:
       - "Removing: {{ item.domains }}"
+    tags:
+      - debug
 
 - name: Remove acme.sh certificate(s) tracked by acme.sh
   ansible.builtin.command: >-
