@@ -8,6 +8,26 @@
   tags:
     - debug
 
+# Prepare a structure for tracking results
+# Lists will be appended during execution
+- name: Initialize scoreboard structure
+  ansible.builtin.set_fact:
+    acme_summary:
+      installed: []
+      renewed: []
+      removed: []
+      failed: []
+  when: acme_summary is not defined
+
+
+- name: acme.sh Plan
+  ansible.builtin.include_tasks:
+    file: acme-plan.yml
+    apply:
+      tags: plan
+  become_user: "{{ acme_sh_become_user }}"
+    tags: plan
+
 - name: Install Block
   block:
 

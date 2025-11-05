@@ -17,72 +17,83 @@
   when:
     - not acme_sh_uninstall or acme_sh_uninstall|bool == false
 
-- name: Run custom acme.sh command
-  ansible.builtin.shell: ./acme.sh {{ item.custom_command }}
-  args:
-    chdir: "{{ acme_sh_default_directory }}"
-    executable: "{{ bash_executable_path }}"
-  environment: "{{ item.dns_provider_api_keys | default(acme_sh_default_dns_provider_api_keys | default({})) }}"
-  loop: "{{ acme_sh_domains }}"
-  when:
-    - acme_sh_domains is defined and acme_sh_domains | length > 0
-    - item.domains is defined and item.domains | length > 0
-    - (item.dns_provider | default(acme_sh_default_dns_provider | default('dns_cf'))) | length > 0
-    - (item.dns_provider_api_keys | default(acme_sh_default_dns_provider_api_keys)) | length > 0
-    - item.custom_command is defined and item.custom_command | length > 0
-    - not (item.remove|default(false)|bool)
-    - not acme_sh_uninstall|default(false)|bool
-  
-  become_user: "{{ acme_sh_become_user }}"
-  tags: custom_command
+#- name: Run custom acme.sh command
+#  ansible.builtin.shell: ./acme.sh {{ item.custom_command }}
+#  args:
+#    chdir: "{{ acme_sh_default_directory }}"
+#    executable: "{{ bash_executable_path }}"
+#  environment: "{{ item.dns_provider_api_keys | default(acme_sh_default_dns_provider_api_keys | default({})) }}"
+#  loop: "{{ acme_sh_domains }}"
+#  when:
+#    - acme_sh_domains is defined and acme_sh_domains | length > 0
+#    - item.domains is defined and item.domains | length > 0
+#    - (item.dns_provider | default(acme_sh_default_dns_provider | default('dns_cf'))) | length > 0
+#    - (item.dns_provider_api_keys | default(acme_sh_default_dns_provider_api_keys)) | length > 0
+#    - item.custom_command is defined and item.custom_command | length > 0
+#    - not (item.remove|default(false)|bool)
+#    - not acme_sh_uninstall|default(false)|bool
+#  
+#  become_user: "{{ acme_sh_become_user }}"
+#  tags: custom_command
 
-- name: Issue acme.sh certificate(s) (this will sleep for dns_sleep seconds)
-  ansible.builtin.shell: >-
-    {{ 
-      './acme.sh --issue -d ' ~ (item.domains | join(' -d ')) ~
-      ' --dns ' ~ item.dns_provider | default(acme_sh_default_dns_provider | default('dns_cf')) ~
-      ' --dnssleep ' ~ item.dns_sleep | default(acme_sh_default_dns_sleep | default('30')) | string ~
-      
-      ( " --domain-alias" if item.domain_alias | default(acme_sh_default_domain_alias | default(False)) | bool else "" ) ~
-      
-      ( " --challenge-alias \"" ~ item.challenge_alias | default(acme_sh_default_challenge_alias) ~ '"' 
-        if item.challenge_alias | default(acme_sh_default_challenge_alias | default('')) else "" ) ~
-      
-      ( " --force" if item.force_issue | default(acme_sh_default_force_issue | default(False)) | bool else "" ) ~
-      ( " --staging" if item.staging | default(acme_sh_default_staging | default(False)) | bool else "" ) ~
-      ( " --debug" if item.debug | default(acme_sh_default_debug | default(False)) | bool else "" ) ~
-      
-      ( " --pre-hook \"" ~ item.issue_pre_hook | default(acme_sh_default_issue_pre_hook) ~ '"' 
-        if item.issue_pre_hook | default(acme_sh_default_issue_pre_hook | default('')) else "" ) ~
-        
-      ( " --post-hook \"" ~ item.issue_post_hook | default(acme_sh_default_issue_post_hook) ~ '"' 
-        if item.issue_post_hook | default(acme_sh_default_issue_post_hook | default('')) else "" ) ~
-        
-      ( " --renew-hook \"" ~ item.issue_renew_hook | default(acme_sh_default_issue_renew_hook) ~ '"' 
-        if item.issue_renew_hook | default(acme_sh_default_issue_renew_hook | default('')) else "" ) ~
-        
-      ( " " ~ item.acme_sh_extra_flags_issue | default(acme_sh_default_extra_flags_issue | default('--keylength ec-384 --ecc')) )
-    }}
-  args:
-    chdir: "{{ acme_sh_default_directory }}"
-    executable: "{{ bash_executable_path }}"
-  environment: "{{ item.dns_provider_api_keys | default(acme_sh_default_dns_provider_api_keys | default({})) }}"
+- name: Process ACME domain
+  ansible.builtin.include_tasks: acme_domain_workflow.yml
   loop: "{{ acme_sh_domains }}"
+  loop_control:
+    label: "{{ item.domains[0] }}"
   when:
-    # ... (when conditions remain unchanged) ...
     - acme_sh_domains is defined and acme_sh_domains | length > 0
     - item.domains is defined and item.domains | length > 0
-    - (item.dns_provider | default(acme_sh_default_dns_provider)) | length > 0
-    - (item.dns_provider_api_keys | default(acme_sh_default_dns_provider_api_keys)) | length > 0
-    - not (item.force_renew|default(false)|bool)
     - not (item.remove|default(false)|bool)
-    - not (item.custom_command|default(false)|bool)
     - not acme_sh_uninstall|default(false)|bool
-  become_user: "{{ acme_sh_become_user }}"
-  register: issue_result
-  changed_when: issue_result.rc == 0 and "Cert success" in issue_result.stdout
-  failed_when: issue_result.rc != 0 and "Domains not changed" not in issue_result.stdout
-  tags: install_domain
+
+#- name: Issue acme.sh certificate(s) (this will sleep for dns_sleep seconds)
+#  ansible.builtin.shell: >-
+#    {{ 
+#      './acme.sh --issue -d ' ~ (item.domains | join(' -d ')) ~
+#      ' --dns ' ~ item.dns_provider | default(acme_sh_default_dns_provider | default('dns_cf')) ~
+#      ' --dnssleep ' ~ item.dns_sleep | default(acme_sh_default_dns_sleep | default('30')) | string ~
+#      
+#      ( " --domain-alias" if item.domain_alias | default(acme_sh_default_domain_alias | default(False)) | bool else "" ) ~
+#      
+#      ( " --challenge-alias \"" ~ item.challenge_alias | default(acme_sh_default_challenge_alias) ~ '"' 
+#        if item.challenge_alias | default(acme_sh_default_challenge_alias | default('')) else "" ) ~
+#      
+#      ( " --force" if (item.force_issue | default(acme_sh_default_force_issue | default(False)) | bool) | (item.force_renew | default(acme_sh_default_force_renew | default(False)) | bool ) else "" ) ~
+#      ( " --staging" if item.staging | default(acme_sh_default_staging | default(False)) | bool else "" ) ~
+#      ( " --debug" if item.debug | default(acme_sh_default_debug | default(False)) | bool else "" ) ~
+#      
+#      ( " --pre-hook \"" ~ item.issue_pre_hook | default(acme_sh_default_issue_pre_hook) ~ '"' 
+#        if item.issue_pre_hook | default(acme_sh_default_issue_pre_hook | default('')) else "" ) ~
+#        
+#      ( " --post-hook \"" ~ item.issue_post_hook | default(acme_sh_default_issue_post_hook) ~ '"' 
+#        if item.issue_post_hook | default(acme_sh_default_issue_post_hook | default('')) else "" ) ~
+#        
+#      ( " --renew-hook \"" ~ item.issue_renew_hook | default(acme_sh_default_issue_renew_hook) ~ '"' 
+#        if item.issue_renew_hook | default(acme_sh_default_issue_renew_hook | default('')) else "" ) ~
+#        
+#      ( " " ~ item.acme_sh_extra_flags_issue | default(acme_sh_default_extra_flags_issue | default('--keylength ec-384 --ecc')) )
+#    }}
+#  args:
+#    chdir: "{{ acme_sh_default_directory }}"
+#    executable: "{{ bash_executable_path }}"
+#  environment: "{{ item.dns_provider_api_keys | default(acme_sh_default_dns_provider_api_keys | default({})) }}"
+#  loop: "{{ acme_sh_domains }}"
+#  when:
+#    # ... (when conditions remain unchanged) ...
+#    - (item.dns_provider | default(acme_sh_default_dns_provider)) | length > 0
+#    - (item.dns_provider_api_keys | default(acme_sh_default_dns_provider_api_keys)) | length > 0
+#    - acme_sh_domains is defined and acme_sh_domains | length > 0
+#    - item.domains is defined and item.domains | length > 0
+#    - not (item.remove|default(false)|bool)
+#    - not acme_sh_uninstall|default(false)|bool
+##    - not (item.force_renew|default(false)|bool)
+##    - not (item.custom_command|default(false)|bool)
+#  become_user: "{{ acme_sh_become_user }}"
+#  register: issue_result
+#  changed_when: issue_result.rc == 0 and "Cert success" in issue_result.stdout
+#  failed_when: issue_result.rc != 0 and "Domains not changed" not in issue_result.stdout
+#  tags: install_domain
 
 #- name: Debug Return code for issue command
 #  ansible.builtin.debug: var=issue_result
@@ -94,77 +105,77 @@
 #      - "Return code {{ item.rc }}"
 #  loop: "{{ issue_result.results }}"
 
-- name: Use acme.sh to generate a pkcs12(pfx) certificate (https://github.com/acmesh-official/acme.sh/wiki#3-how-to-get-pkcs12pfx-format) 
-  vars:
-    acme_exe: "{{ item.acme_sh_executable | default(acme_sh_default_executable) | default('/root/.acme.sh/acme.sh') }}"
-    pkcs_pass: "{{ item.acme_sh_pkcs12_password | default(acme_sh_default_pkcs12_password) | default('pass') }}"
-  ansible.builtin.shell: >-
-    {{
-      acme_exe ~ ' --toPkcs -d ' ~ item.domains[0] ~ ' --password ' ~ pkcs_pass ~
-      (" --ecc" if (item.acme_sh_extra_flags
-              | default(acme_sh_default_extra_flags)
-              | default(''))
-              | regex_search('(^|\\s)--ecc(\\s|$)')
-      else "")
-    }}
-  args:
-    chdir: "{{ acme_sh_default_directory }}"
-    executable: "{{ bash_executable_path }}"
-  loop: "{{ acme_sh_domains }}"
-  when:
-    - acme_sh_domains is defined and acme_sh_domains | length > 0
-    - item.domains is defined and item.domains | length > 0
-    - (item.dns_provider | default(acme_sh_default_dns_provider)) | length > 0
-    - (item.dns_provider_api_keys | default(acme_sh_default_dns_provider_api_keys)) | length > 0
-    - not (item.force_renew|default(false)|bool)
-    - not (item.remove|default(false)|bool)
-    - not (item.custom_command|default(false)|bool)
-    - not acme_sh_uninstall|default(false)|bool
-    - issue_result.rc == 0
-  become_user: "{{ acme_sh_become_user }}"
+#- name: Use acme.sh to generate a pkcs12(pfx) certificate (https://github.com/acmesh-official/acme.sh/wiki#3-how-to-get-pkcs12pfx-format) 
+#  vars:
+#    acme_exe: "{{ item.acme_sh_executable | default(acme_sh_default_executable) | default('/root/.acme.sh/acme.sh') }}"
+#    pkcs_pass: "{{ item.acme_sh_pkcs12_password | default(acme_sh_default_pkcs12_password) | default('pass') }}"
+#  ansible.builtin.shell: >-
+#    {{
+#      acme_exe ~ ' --toPkcs -d ' ~ item.domains[0] ~ ' --password ' ~ pkcs_pass ~
+#      (" --ecc" if (item.acme_sh_extra_flags
+#              | default(acme_sh_default_extra_flags)
+#              | default(''))
+#              | regex_search('(^|\\s)--ecc(\\s|$)')
+#      else "")
+#    }}
+#  args:
+#    chdir: "{{ acme_sh_default_directory }}"
+#    executable: "{{ bash_executable_path }}"
+#  loop: "{{ acme_sh_domains }}"
+#  when:
+#    - acme_sh_domains is defined and acme_sh_domains | length > 0
+#    - item.domains is defined and item.domains | length > 0
+#    - (item.dns_provider | default(acme_sh_default_dns_provider)) | length > 0
+#    - (item.dns_provider_api_keys | default(acme_sh_default_dns_provider_api_keys)) | length > 0
+#    - not (item.force_renew|default(false)|bool)
+#    - not (item.remove|default(false)|bool)
+#    - not (item.custom_command|default(false)|bool)
+#    - not acme_sh_uninstall|default(false)|bool
+#    - issue_result.rc == 0
+#  become_user: "{{ acme_sh_become_user }}"
 
-- name: Force renew acme.sh certificate(s)
-  ansible.builtin.shell: >-
-    {{
-      './acme.sh --renew -d ' ~ item.domains | first ~ ' --force' ~
-      ( " --debug" if item.debug | default(acme_sh_default_debug | default(False)) | bool else "" ) ~
-      (" --ecc" if (item.acme_sh_extra_flags_renew
-              | default(acme_sh_default_extra_flags_renew)
-              | default(''))
-              | regex_search('(^|\\s)--ecc(\\s|$)')
-      else "")
-    }}
-  args:
-    chdir: "{{ acme_sh_default_directory }}"
-    executable: "{{ bash_executable_path }}"
-  loop: "{{ acme_sh_domains }}"
-  when:
-    - acme_sh_domains is defined and acme_sh_domains | length > 0
-    - item.domains is defined and item.domains | length > 0
-    - item.force_issue is undefined or not item.force_issue
-    - item.force_renew is defined and item.force_renew
-    - item.remove is undefined or not item.remove
-    - not acme_sh_uninstall or acme_sh_uninstall|bool == false
-  become_user: "{{ acme_sh_become_user }}"
-  register: renew_result
-  failed_when: renew_result.rc != 0 and "Reload error for" not in renew_result.stderr
-  tags: force_renew_domain
+#- name: Force renew acme.sh certificate(s)
+#  ansible.builtin.shell: >-
+#    {{
+#      './acme.sh --renew -d ' ~ item.domains | first ~ ' --force' ~
+#      ( " --debug" if item.debug | default(acme_sh_default_debug | default(False)) | bool else "" ) ~
+#      (" --ecc" if (item.acme_sh_extra_flags_renew
+#              | default(acme_sh_default_extra_flags_renew)
+#              | default(''))
+#              | regex_search('(^|\\s)--ecc(\\s|$)')
+#      else "")
+#    }}
+#  args:
+#    chdir: "{{ acme_sh_default_directory }}"
+#    executable: "{{ bash_executable_path }}"
+#  loop: "{{ acme_sh_domains }}"
+#  when:
+#    - acme_sh_domains is defined and acme_sh_domains | length > 0
+#    - item.domains is defined and item.domains | length > 0
+#    - item.force_issue is undefined or not item.force_issue
+#    - item.force_renew is defined and item.force_renew
+#    - item.remove is undefined or not item.remove
+#    - not acme_sh_uninstall or acme_sh_uninstall|bool == false
+#  become_user: "{{ acme_sh_become_user }}"
+#  register: renew_result
+#  failed_when: renew_result.rc != 0 and "Reload error for" not in renew_result.stderr
+#  tags: force_renew_domain
 
-- name: Create acme.sh install directory path(s) for domain(s) certificates
-  ansible.builtin.file:
-    path: "{{ acme_sh_copy_certs_to_path }}/{{ item.domains | first }}"
-    state: "directory"
-    group: "{{ acme_sh_become_user }}"
-    owner: "{{ acme_sh_become_user }}"
-    mode: "{{ acme_sh_install_directory_permissions | default(acme_sh_default_install_directory_permissions) }}"
-  loop: "{{ acme_sh_domains }}"
-  when:
-    - acme_sh_domains is defined and acme_sh_domains | length > 0
-    - item.domains is defined and item.domains | length > 0
-    - item.custom_command is undefined or not item.custom_command
-    - item.remove is undefined or not item.remove
-    - not acme_sh_uninstall or acme_sh_uninstall|bool == false
-  become_user: "{{ acme_sh_become_user }}"
+#- name: Create acme.sh install directory path(s) for domain(s) certificates
+#  ansible.builtin.file:
+#    path: "{{ acme_sh_copy_certs_to_path }}/{{ item.domains | first }}"
+#    state: "directory"
+#    group: "{{ acme_sh_become_user }}"
+#    owner: "{{ acme_sh_become_user }}"
+#    mode: "{{ acme_sh_install_directory_permissions | default(acme_sh_default_install_directory_permissions) }}"
+#  loop: "{{ acme_sh_domains }}"
+#  when:
+#    - acme_sh_domains is defined and acme_sh_domains | length > 0
+#    - item.domains is defined and item.domains | length > 0
+#    - item.custom_command is undefined or not item.custom_command
+#    - item.remove is undefined or not item.remove
+#    - not acme_sh_uninstall or acme_sh_uninstall|bool == false
+#  become_user: "{{ acme_sh_become_user }}"
 
 #- name: Create pcks12 file using acme technique -- This function requires a password to be set
 #  ansible.builtin.command: >-
@@ -377,37 +388,37 @@
 #  changed_when: issue_result.results[domains_index].changed or renew_result.results[domains_index].changed
 #  failed_when: install_cert_result.rc != 0 and "Reload error for" not in install_cert_result.stderr
 
-- name: Deploy acme.sh certficates
-  vars:
-    acme_exe: "{{ item.acme_sh_executable | default(acme_sh_default_executable) | default('/root/.acme.sh/acme.sh') }}"
-  ansible.builtin.shell: >-
-    {{
-      acme_exe ~ ' --deploy -d ' ~ item.domains | first ~ ' --deploy-hook localcopy' ~
-      (" --ecc" if (item.acme_sh_extra_flags
-              | default(acme_sh_default_extra_flags)
-              | default(''))
-              | regex_search('(^|\\s)--ecc(\\s|$)')
-      else "")
-    }}
-  environment:
-    DEPLOY_LOCALCOPY_CERTKEY: "{{ acme_sh_copy_certs_to_path ~ '/' ~ item.domains | first ~ '/key.pem' }}"
-    DEPLOY_LOCALCOPY_CERTIFICATE: "{{ acme_sh_copy_certs_to_path ~ '/' ~ item.domains | first ~ '/cert.pem' }}"
-    DEPLOY_LOCALCOPY_FULLCHAIN: "{{ acme_sh_copy_certs_to_path ~ '/' ~ item.domains | first ~ '/fullchain.pem' }}"
-    DEPLOY_LOCALCOPY_CA: "{{ acme_sh_copy_certs_to_path ~ '/' ~ item.domains | first ~ '/ca.pem' }}"
-    DEPLOY_LOCALCOPY_PFX: "{{ acme_sh_copy_certs_to_path ~ '/' ~ item.domains | first ~ '/pkcs12.pfx' }}"
-    DEPLOY_LOCALCOPY_RELOADCMD: "{{ (item.install_cert_reloadcmd | default(acme_sh_default_install_cert_reloadcmd) | default('')) }}"
-  args:
-    chdir: "{{ acme_sh_directory | default(acme_sh_default_directory) | default('/root/.acme.sh') }}"
-    executable: "{{ bash_executable_path | default('/bin/bash') }}"
-  loop: "{{ acme_sh_domains }}"
-  when:
-    - acme_sh_domains is defined and acme_sh_domains | length > 0
-    - item.domains is defined and item.domains | length > 0
-    - not (item.remove|default(false)|bool)
-    - not (item.custom_command|default(false)|bool)
-    - not acme_sh_uninstall|default(false)|bool
-  become_user: "{{ acme_sh_become_user }}"
-  register: deploy_cert_result
+#- name: Deploy acme.sh certficates
+#  vars:
+#    acme_exe: "{{ item.acme_sh_executable | default(acme_sh_default_executable) | default('/root/.acme.sh/acme.sh') }}"
+#  ansible.builtin.shell: >-
+#    {{
+#      acme_exe ~ ' --deploy -d ' ~ item.domains | first ~ ' --deploy-hook localcopy' ~
+#      (" --ecc" if (item.acme_sh_extra_flags
+#              | default(acme_sh_default_extra_flags)
+#              | default(''))
+#              | regex_search('(^|\\s)--ecc(\\s|$)')
+#      else "")
+#    }}
+#  environment:
+#    DEPLOY_LOCALCOPY_CERTKEY: "{{ acme_sh_copy_certs_to_path ~ '/' ~ item.domains | first ~ '/key.pem' }}"
+#    DEPLOY_LOCALCOPY_CERTIFICATE: "{{ acme_sh_copy_certs_to_path ~ '/' ~ item.domains | first ~ '/cert.pem' }}"
+#    DEPLOY_LOCALCOPY_FULLCHAIN: "{{ acme_sh_copy_certs_to_path ~ '/' ~ item.domains | first ~ '/fullchain.pem' }}"
+#    DEPLOY_LOCALCOPY_CA: "{{ acme_sh_copy_certs_to_path ~ '/' ~ item.domains | first ~ '/ca.pem' }}"
+#    DEPLOY_LOCALCOPY_PFX: "{{ acme_sh_copy_certs_to_path ~ '/' ~ item.domains | first ~ '/pkcs12.pfx' }}"
+#    DEPLOY_LOCALCOPY_RELOADCMD: "{{ (item.install_cert_reloadcmd | default(acme_sh_default_install_cert_reloadcmd) | default('')) }}"
+#  args:
+#    chdir: "{{ acme_sh_directory | default(acme_sh_default_directory) | default('/root/.acme.sh') }}"
+#    executable: "{{ bash_executable_path | default('/bin/bash') }}"
+#  loop: "{{ acme_sh_domains }}"
+#  when:
+#    - acme_sh_domains is defined and acme_sh_domains | length > 0
+#    - item.domains is defined and item.domains | length > 0
+#    - not (item.remove|default(false)|bool)
+#    - not (item.custom_command|default(false)|bool)
+#    - not acme_sh_uninstall|default(false)|bool
+#  become_user: "{{ acme_sh_become_user }}"
+#  register: deploy_result
 
 #- name: pkcs12_file_block
 #  ansible.builtin.include_tasks:
