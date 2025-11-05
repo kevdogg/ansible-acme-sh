@@ -1,0 +1,95 @@
+---
+- name: Resolve acme.sh directory (with host override support)
+  ansible.builtin.set_fact:
+    acme_sh_directory_resolved: >-
+      {{
+        (
+          acme_sh_directory
+          | default(acme_sh_default_directory, true)
+        )
+        | expanduser
+      }}
+
+# STEP 1 — Stop tracking with acme.sh
+- name: "acme.sh --remove -d {{ item.domains[0] }}"
+  ansible.builtin.shell: >-
+    ./acme.sh --remove -d {{ item.domains[0] }}
+    {{ ' --ecc' if (item.acme_sh_extra_flags | default(acme_sh_default_extra_flags) | default('')) 
+                  | regex_search('(^|\\s)--ecc(\\s|$)') else '' }}
+  args:
+    chdir: "{{ acme_sh_directory_resolved }}"
+    executable: "{{ bash_executable_path | default('/bin/bash') }}"
+  register: acme_remove_result
+  failed_when: acme_remove_result.rc not in [0, 2]  # 2 means "nothing to remove"
+  changed_when: acme_remove_result.rc == 0
+  become: true
+  become_user: "{{ acme_sh_become_user | default(omit) }}"
+
+# STEP 2 — Remove acme.sh internal certificate files (ecc + non-ecc)
+- name: Remove internal certificate files (RSA/ECC)
+  ansible.builtin.include_tasks:
+    file: remove-acme-certificate-files-and-directory.yml
+  when:
+    - acme_remove_result.rc == 0
+  vars:
+    acme_remove_domain_name: "{{ item.domains[0] }}"
+
+# STEP 3 — Remove installed certificate copies
+- name: Remove installed certificate files
+  ansible.builtin.include_tasks:
+    file: remove-acme-certificate-installed-files-and-directory.yml
+  when:
+    - acme_remove_result.rc == 0
+  vars:
+    acme_remove_domain_name: "{{ item.domains[0] }}"
+
+# STEP 4 — Record result in scoreboard
+- name: Record domain removal result
+  ansible.builtin.set_fact:
+    acme_domain_status: >-
+      {{
+        'removed' if acme_remove_result.rc == 0
+        else 'failed'
+      }}
+    acme_domain_result:
+      domain: "{{ item.domains[0] }}"
+      domains: "{{ item.domains }}"
+      status: "{{ acme_domain_status }}"
+      rc_remove: "{{ acme_remove_result.rc }}"
+      stdout_remove: "{{ acme_remove_result.stdout | default('') }}"
+  when: acme_remove_result is defined
+
+# STEP 5 — Append result to scoreboard
+- name: Append removal result to scoreboard
+  ansible.builtin.set_fact:
+    acme_summary: >-
+      {{
+        acme_summary
+        | combine({
+            'removed': (acme_summary.removed + [acme_domain_result])
+                        if acme_domain_status == 'removed' else acme_summary.removed,
+            'failed':  (acme_summary.failed  + [acme_domain_result])
+                        if acme_domain_status == 'failed' else acme_summary.failed
+          }, recursive=True)
+      }}
+  when: acme_domain_status is defined
+
+# STEP 6 — Immediate visual feedback
+- name: Show per-domain removal result
+  ansible.builtin.debug:
+    msg: >-
+      {{
+        (
+          '🗑️  Successfully removed ' ~ item.domains[0]
+          if acme_domain_status == 'removed'
+          else '❌ Failed to remove ' ~ item.domains[0]
+        )
+      }}
+  when: acme_domain_status is defined
+
+# Optional: show scoreboard after each removal (only in verbose/debug mode)
+- name: Snapshot scoreboard after domain removal (verbose mode only)
+  ansible.builtin.include_tasks: debug-acme-scoreboard.yml
+  when: ansible_verbosity | int >= 2
+  tags: debug
+

@@ -1,0 +1,254 @@
+---
+- name: Resolve acme.sh directory (with host override support)
+  ansible.builtin.set_fact:
+    acme_sh_directory_resolved: >-
+      {{
+        (
+          acme_sh_directory
+          | default(acme_sh_default_directory, true)
+        )
+        | expanduser
+      }}
+
+- name: Define live cert candidate paths
+  ansible.builtin.set_fact:
+    acme_live_cert_candidates:
+      - "{{ acme_sh_directory_resolved }}/{{ item.domains[0] }}/fullchain.cer"
+      - "{{ acme_sh_directory_resolved }}/{{ item.domains[0] }}_ecc/fullchain.cer"
+
+# BEFORE: probe which live cert path exists and capture mtime (0 if none)
+- name: Stat live cert candidates (before)
+  ansible.builtin.stat:
+    path: "{{ candidate }}"
+  register: live_before_stats
+  loop: "{{ acme_live_cert_candidates }}"
+  loop_control:
+    loop_var: candidate
+  failed_when: false
+  become: true
+  become_user: "{{ acme_sh_become_user | default(omit) }}"
+
+- name: Pick live cert path (before)
+  ansible.builtin.set_fact:
+    acme_live_cert_path_before: >-
+      {{
+        (live_before_stats.results | selectattr('stat.exists') | map(attribute='stat.path') | list | first)
+        | default(acme_live_cert_candidates[0])
+      }}
+    acme_live_cert_mtime_before: >-
+      {{
+        (live_before_stats.results | selectattr('stat.exists') | map(attribute='stat.mtime') | list | first)
+        | default(0)
+      }}
+
+# ISSUE / RENEW
+- name: Issue acme.sh certificate(s) (this will sleep for dns_sleep seconds)
+  vars:
+    acme_exe: "{{ acme_sh_bin }}"
+  ansible.builtin.shell: >-
+    {{
+      acme_exe ~ ' --issue -d ' ~ (item.domains | join(' -d ')) ~
+      ' --dns ' ~ (item.dns_provider | default(acme_sh_default_dns_provider | default('dns_cf'))) ~
+      ' --dnssleep ' ~ (item.dns_sleep | default(acme_sh_default_dns_sleep | default('30')) | string) ~
+      ( ' --domain-alias' if item.domain_alias | default(acme_sh_default_domain_alias | default(False)) | bool else '' ) ~
+      ( ' --challenge-alias "' ~ (item.challenge_alias | default(acme_sh_default_challenge_alias | default(''))) ~ '"' 
+        if item.challenge_alias | default(acme_sh_default_challenge_alias | default('')) else '' ) ~
+      ( ' --force' if (item.force_issue | default(acme_sh_default_force_issue | default(False)) | bool) or (item.force_renew | default(acme_sh_default_force_renew | default(False)) | bool) else '' ) ~
+      ( ' --staging' if item.staging | default(acme_sh_default_staging | default(False)) | bool else '' ) ~
+      ( ' --debug' if item.debug | default(acme_sh_default_debug | default(False)) | bool else '' ) ~
+      ( ' --pre-hook "' ~ (item.issue_pre_hook | default(acme_sh_default_issue_pre_hook | default(''))) ~ '"' 
+        if item.issue_pre_hook | default(acme_sh_default_issue_pre_hook | default('')) else '' ) ~
+      ( ' --post-hook "' ~ (item.issue_post_hook | default(acme_sh_default_issue_post_hook | default(''))) ~ '"' 
+        if item.issue_post_hook | default(acme_sh_default_issue_post_hook | default('')) else '' ) ~
+      ( ' --renew-hook "' ~ (item.issue_renew_hook | default(acme_sh_default_issue_renew_hook | default(''))) ~ '"' 
+        if item.issue_renew_hook | default(acme_sh_default_issue_renew_hook | default('')) else '' ) ~
+      ( ' ' ~ (item.acme_sh_extra_flags_issue | default(acme_sh_default_extra_flags_issue | default('--keylength ec-384 --ecc'))) )
+    }}
+  args:
+    chdir: "{{ acme_sh_directory_resolved }}"
+    executable: "{{ bash_executable_path }}"
+  environment: "{{ item.dns_provider_api_keys | default(acme_sh_default_dns_provider_api_keys | default({})) }}"
+  register: issue_result
+  changed_when: >
+    issue_result.rc == 0 and
+    (
+      "Cert success" in issue_result.stdout
+      or "Renew" in issue_result.stdout
+      or "Create new certificate" in issue_result.stdout
+    )
+  failed_when: issue_result.rc != 0
+  become: true
+  become_user: "{{ acme_sh_become_user | default(omit) }}"
+  when:
+    - (item.dns_provider | default(acme_sh_default_dns_provider)) | length > 0
+    - (item.dns_provider_api_keys | default(acme_sh_default_dns_provider_api_keys)) | length > 0
+
+# AFTER
+- name: Stat live cert candidates (after)
+  ansible.builtin.stat:
+    path: "{{ candidate }}"
+  register: live_after_stats
+  loop: "{{ acme_live_cert_candidates }}"
+  loop_control:
+    loop_var: candidate
+  failed_when: false
+  become: true
+  become_user: "{{ acme_sh_become_user | default(omit) }}"
+
+- name: Pick live cert path (after)
+  ansible.builtin.set_fact:
+    acme_live_cert_path_after: >-
+      {{
+        (live_after_stats.results | selectattr('stat.exists') | map(attribute='stat.path') | list | first)
+        | default(acme_live_cert_candidates[0])
+      }}
+    acme_live_cert_mtime_after: >-
+      {{
+        (live_after_stats.results | selectattr('stat.exists') | map(attribute='stat.mtime') | list | first)
+        | default(0)
+      }}
+
+- name: Determine whether a new cert was actually issued or renewed
+  ansible.builtin.set_fact:
+    cert_was_renewed: >-
+      {{
+        (
+          "Cert success" in issue_result.stdout
+          or "Renew" in issue_result.stdout
+          or "Create new certificate" in issue_result.stdout
+        )
+        and (acme_live_cert_mtime_after | int) > (acme_live_cert_mtime_before | int)
+      }}
+
+- name: Debug renewal detection
+  ansible.builtin.debug:
+    msg:
+      - "cert_was_renewed = {{ cert_was_renewed }}"
+      - "mtime_before = {{ acme_live_cert_mtime_before }}"
+      - "mtime_after  = {{ acme_live_cert_mtime_after }}"
+  when: ansible_verbosity >= 2
+
+# PKCS12 creation
+- name: Generate PKCS#12 (pfx)
+  vars:
+    acme_exe: "{{ acme_sh_bin }}"
+    pkcs_pass: "{{ item.acme_sh_pkcs12_password | default(acme_sh_default_pkcs12_password) | default('pass') }}"
+  ansible.builtin.shell: >-
+    {{
+      acme_exe ~ ' --toPkcs -d ' ~ item.domains[0] ~ ' --password ' ~ pkcs_pass ~
+      ( ' --ecc' if (item.acme_sh_extra_flags | default(acme_sh_default_extra_flags) | default(''))
+                  | regex_search('(^|\\s)--ecc(\\s|$)') else '' )
+    }}
+  args:
+    chdir: "{{ acme_sh_directory_resolved }}"
+    executable: "{{ bash_executable_path }}"
+  register: pkcs_result
+  failed_when: pkcs_result.rc != 0
+  when:
+    - issue_result.rc == 0
+    - "Cert success" in issue_result.stdout
+      or "Renew" in issue_result.stdout
+      or "Create new certificate" in issue_result.stdout
+  become: true
+  become_user: "{{ acme_sh_become_user | default(omit) }}"
+
+# INSTALL path
+- name: Ensure install directory exists
+  ansible.builtin.file:
+    path: "{{ acme_sh_copy_certs_to_path }}/{{ item.domains | first }}"
+    state: directory
+    owner: "{{ acme_sh_become_user }}"
+    group: "{{ acme_sh_become_user }}"
+    mode: "{{ acme_sh_install_directory_permissions | default(acme_sh_default_install_directory_permissions) }}"
+  when:
+    - issue_result.rc == 0
+    - pkcs_result.rc == 0
+    - "Cert success" in issue_result.stdout
+      or "Renew" in issue_result.stdout
+      or "Create new certificate" in issue_result.stdout
+  become: true
+  become_user: "{{ acme_sh_become_user | default(omit) }}"
+
+# DEPLOY
+- name: Deploy acme.sh certificates
+  vars:
+    acme_exe: "{{ acme_sh_bin }}"
+  ansible.builtin.shell: >-
+    {{
+      acme_exe ~ ' --deploy -d ' ~ (item.domains | first) ~ ' --deploy-hook localcopy' ~
+      ( ' --ecc' if (item.acme_sh_extra_flags | default(acme_sh_default_extra_flags) | default(''))
+                  | regex_search('(^|\\s)--ecc(\\s|$)') else '' )
+    }}
+  environment:
+    DEPLOY_LOCALCOPY_CERTKEY: "{{ acme_sh_copy_certs_to_path }}/{{ item.domains | first }}/key.pem"
+    DEPLOY_LOCALCOPY_CERTIFICATE: "{{ acme_sh_copy_certs_to_path }}/{{ item.domains | first }}/cert.pem"
+    DEPLOY_LOCALCOPY_FULLCHAIN: "{{ acme_sh_copy_certs_to_path }}/{{ item.domains | first }}/fullchain.pem"
+    DEPLOY_LOCALCOPY_CA: "{{ acme_sh_copy_certs_to_path }}/{{ item.domains | first }}/ca.pem"
+    DEPLOY_LOCALCOPY_PFX: "{{ acme_sh_copy_certs_to_path }}/{{ item.domains | first }}/pkcs12.pfx"
+    DEPLOY_LOCALCOPY_RELOADCMD: "{{ item.install_cert_reloadcmd | default(acme_sh_default_install_cert_reloadcmd) | default('') }}"
+  args:
+    chdir: "{{ acme_sh_directory_resolved }}"
+    executable: "{{ bash_executable_path | default('/bin/bash') }}"
+  register: deploy_result
+  failed_when: deploy_result.rc != 0
+  when:
+    - issue_result.rc == 0
+    - pkcs_result.rc == 0
+    - "Cert success" in issue_result.stdout
+      or "Renew" in issue_result.stdout
+      or "Create new certificate" in issue_result.stdout
+  become: true
+  become_user: "{{ acme_sh_become_user | default(omit) }}"
+
+# SCOREBOARD
+- name: Set per-domain result
+  ansible.builtin.set_fact:
+    acme_domain_status: >-
+      {{
+        (
+          'failed' if (
+            issue_result.rc != 0
+            or pkcs_result.rc != 0
+            or deploy_result.rc != 0
+          ) else (
+            'renewed' if cert_was_renewed
+            else 'skipped' if ('Skip' in issue_result.stdout)
+            else 'installed'
+          )
+        )
+      }}
+    acme_domain_result:
+      domain: "{{ item.domains[0] }}"
+      domains: "{{ item.domains }}"
+      status: "{{ acme_domain_status }}"
+      rc_issue: "{{ issue_result.rc }}"
+      rc_pkcs: "{{ pkcs_result.rc }}"
+      rc_deploy: "{{ deploy_result.rc }}"
+      stdout_issue: "{{ issue_result.stdout | default('') }}"
+      live_cert_path: "{{ acme_live_cert_path_after }}"
+      force_renew: "{{ item.force_renew | default(false) }}"
+  when: issue_result is defined
+
+- name: Append result to scoreboard buckets
+  ansible.builtin.set_fact:
+    acme_summary: >-
+      {{
+        acme_summary
+        | combine({
+            'installed': (acme_summary.installed + [acme_domain_result])
+                          if acme_domain_status == 'installed' else acme_summary.installed,
+            'renewed':   (acme_summary.renewed   + [acme_domain_result])
+                          if acme_domain_status == 'renewed' else acme_summary.renewed,
+            'skipped':   (acme_summary.skipped   + [acme_domain_result])
+                          if acme_domain_status == 'skipped' else acme_summary.skipped,
+            'failed':    (acme_summary.failed    + [acme_domain_result])
+                          if acme_domain_status == 'failed' else acme_summary.failed
+          }, recursive=True)
+      }}
+  when: acme_domain_status is defined
+
+- name: Snapshot current scoreboard (verbose mode only)
+  ansible.builtin.include_tasks: debug-acme-scoreboard.yml
+  when: ansible_verbosity | int >= 2
+  tags: debug
+

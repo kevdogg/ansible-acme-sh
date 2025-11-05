@@ -2,11 +2,13 @@
 # 1. Gather ACME cert info
 - name: PLAN — gather existing ACME cert info
   ansible.builtin.command: >
-    {{ acme_sh_bin | default('~/.acme.sh/acme.sh') }} --list
+    {{ acme_sh_bin }} --list
   register: acme_list_result
   changed_when: false
   failed_when: false
   tags: plan
+  become: yes
+  become_user: "{{ acme_sh_become_user }}"
 
 # 2. Normalize and parse the table lines
 - name: PLAN — parse ACME cert table (robust)
@@ -75,9 +77,8 @@
       🟡 Renewal recommended (≤30 days)
       🔴 Renewal urgent (≤10 days)
       🆕 First issuance (no cert exists)
-      ⚠  Using default PKCS#12 password
+      ⚠️  Using default PKCS#12 password
   run_once: true
-  when: acme_cert_info is defined
   tags: plan
 
 # 6. INSTALL/RENEW entries
@@ -88,7 +89,7 @@
          Action: INSTALL/RENEW
          PKCS12 password: {{ item.acme_sh_pkcs12_password | default(acme_sh_default_pkcs12_password) }}
       {% if item.acme_sh_pkcs12_password is not defined %}
-         ⚠ Using default PKCS#12 password: '{{ acme_sh_default_pkcs12_password }}'
+        ⚠️  Using default PKCS#12 password: '{{ acme_sh_default_pkcs12_password }}'
       {% endif %}
       {% if acme_cert_info is defined and acme_cert_info[item.domains[0]] is defined %}
          Expires in: {{ acme_cert_info[item.domains[0]] }} days {{ acme_renew_status[item.domains[0]].emoji }}

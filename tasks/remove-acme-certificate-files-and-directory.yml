@@ -1,31 +1,37 @@
 ---
-# Remove Non ECC Certs
-
-- name: Determine if acme.sh domain subdirectory exists
+# Remove non-ECC certs
+- name: Check for acme.sh domain directory
   ansible.builtin.stat:
-    path: "{{ acme_sh_default_directory }}/{{ item.domains | first }}"
+    path: "{{ acme_sh_directory_resolved }}/{{ item.domains | first }}"
   register: directory_result
-  become_user: "{{ acme_sh_become_user }}"
+  failed_when: false
+  become: true
+  become_user: "{{ acme_sh_become_user | default(omit) }}"
 
-- name: Remove acme.sh domain directory if it exists
+- name: Remove acme.sh domain directory (non-ECC)
   ansible.builtin.file:
-    path: "{{ acme_sh_default_directory }}/{{ item.domains | first }}"
-    state: "absent"
-  when: directory_result.stat.exists
-  become_user: "{{ acme_sh_become_user }}"
+    path: "{{ acme_sh_directory_resolved }}/{{ item.domains | first }}"
+    state: absent
+  when: directory_result.stat.exists | default(false)
+  become: true
+  become_user: "{{ acme_sh_become_user | default(omit) }}"
+  changed_when: directory_result.stat.exists | default(false)
 
-# Remove ECC Certs
-
-- name: Determine if acme.sh domain directory with ecc extension if it exits
+# Remove ECC certs
+- name: Check for acme.sh domain ECC directory
   ansible.builtin.stat:
-    path: "{{ acme_sh_default_directory }}/{{ item.domains | first }}_ecc"
+    path: "{{ acme_sh_directory_resolved }}/{{ item.domains | first }}_ecc"
   register: directory_ecc_result
-  become_user: "{{ acme_sh_become_user }}"
+  failed_when: false
+  become: true
+  become_user: "{{ acme_sh_become_user | default(omit) }}"
 
-- name: Remove acme.sh domain directory with ecc extension is it exists
+- name: Remove acme.sh domain ECC directory
   ansible.builtin.file:
-    path: "{{ acme_sh_default_directory }}/{{ item.domains | first }}_ecc"
-    state: "absent"
-  when:
-    - directory_ecc_result.stat.exists
-  become_user: "{{ acme_sh_become_user }}"
+    path: "{{ acme_sh_directory_resolved }}/{{ item.domains | first }}_ecc"
+    state: absent
+  when: directory_ecc_result.stat.exists | default(false)
+  become: true
+  become_user: "{{ acme_sh_become_user | default(omit) }}"
+  changed_when: directory_ecc_result.stat.exists | default(false)
+
