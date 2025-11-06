@@ -1,0 +1,70 @@
+---
+- name: 🧮 Compare planned vs. actual ACME actions (with expiration deltas)
+  vars:
+    # Pre-run expiration info (from plan)
+    pre_cert_info: "{{ acme_cert_info | default({}) }}"
+    # Flatten summary for easier lookup
+    results_flat: >-
+      {{
+        (
+          acme_summary.installed
+          + acme_summary.renewed
+          + acme_summary.skipped
+          + acme_summary.removed
+          + acme_summary.failed
+        )
+      }}
+  ansible.builtin.debug:
+    msg: |
+      {% set color_reset = '\033[0m' %}
+      {% set color_green = '\033[0;32m' %}
+      {% set color_yellow = '\033[0;33m' %}
+      {% set color_red = '\033[0;31m' %}
+      {% set color_cyan = '\033[0;36m' %}
+      {% set color_gray = '\033[0;37m' %}
+
+      {{ color_cyan }}📋 PLAN vs ACTUAL Comparison for {{ inventory_hostname }}{{ color_reset }}
+      ─────────────────────────────────────────────
+      {% for d in acme_sh_domains %}
+        {% set primary = d.domains[0] %}
+        {% set planned_action = 'REMOVE' if d.remove | default(false) else 'INSTALL/RENEW' %}
+        {% set result_obj = results_flat | selectattr('domain', 'equalto', primary) | first %}
+        {% set before_days = pre_cert_info[primary] | default('n/a') %}
+        {% set after_days = result_obj.new_days_remaining | default('n/a') %}
+        {% set delta = (after_days | int) - (before_days | int)
+                       if (before_days is number and after_days is number) else 'n/a' %}
+
+        {% if result_obj is not defined %}
+          {{ color_yellow }}⚠️  {{ primary }} planned for {{ planned_action }} but no result found{{ color_reset }}
+        {% else %}
+          {% if result_obj.status == 'installed' %}
+            {{ color_green }}✅ {{ primary }} — Installed successfully{{ color_reset }}
+            {% if before_days != 'n/a' %}
+              (previously {{ before_days }} days → now {{ after_days }} days)
+            {% endif %}
+          {% elif result_obj.status == 'renewed' %}
+            {{ color_yellow }}🔁 {{ primary }} — Renewed successfully{{ color_reset }}
+            {% if before_days != 'n/a' %}
+              (validity change: {{ '%+d' % delta }} days)
+            {% endif %}
+          {% elif result_obj.status == 'skipped' %}
+            {{ color_gray }}⏸️  {{ primary }} — Skipped (still valid){{ color_reset }}
+            {% if before_days != 'n/a' %}
+              ({{ before_days }} days remaining)
+            {% endif %}
+          {% elif result_obj.status == 'removed' %}
+            {{ color_cyan }}🗑️  {{ primary }} — Removed successfully{{ color_reset }}
+            {% if before_days != 'n/a' %}
+              (was {{ before_days }} days remaining before removal)
+            {% endif %}
+          {% else %}
+            {{ color_red }}❌ {{ primary }} — Failed ({{ result_obj.rc_issue | default(result_obj.rc_remove) | default('unknown rc') }}){{ color_reset }}
+          {% endif %}
+        {% endif %}
+      {% endfor %}
+      ─────────────────────────────────────────────
+  when:
+    - acme_summary is defined
+    - acme_sh_domains is defined
+  tags: compare
+

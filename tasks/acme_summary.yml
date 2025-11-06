@@ -1,36 +1,83 @@
 ---
-- name: "📊 ACME Summary Report for {{ inventory_hostname }}"
+# ---------------------------------------------------------------------------
+# ACME SUMMARY REPORT — with Plan vs Actual comparison
+# ---------------------------------------------------------------------------
+
+- name: 🧾 Summarize ACME Certificate Results (Plan vs Actual)
+  vars:
+    plan_data: "{{ acme_plan_summary | default({}) }}"
   ansible.builtin.debug:
     msg: |
-      {% set color_reset = '\033[0m' %}
-      {% set color_green = '\033[0;32m' %}
-      {% set color_yellow = '\033[0;33m' %}
-      {% set color_red = '\033[0;31m' %}
-      {% set color_cyan = '\033[0;36m' %}
-      {% set color_gray = '\033[0;37m' %}
+      ════════════════════════════════════════════════════════════════════
+      🧾 ACME.SH CERTIFICATE SUMMARY for {{ inventory_hostname }}
+      ════════════════════════════════════════════════════════════════════
+      {% set total = (
+          acme_summary.installed | length +
+          acme_summary.renewed | length +
+          acme_summary.skipped | length +
+          acme_summary.failed | length
+      ) %}
+      🧠 Processed domains: {{ total }}
 
-      {% if acme_summary is not defined %}
-      ⚠️  {{ color_yellow }}No summary data available — no domains were processed.{{ color_reset }}
-      {% else %}
-      {{ color_cyan }}📋 Final ACME Summary for {{ inventory_hostname }}{{ color_reset }}
-      ─────────────────────────────────────────────
-      {{ color_green }}✅ Installed:{{ color_reset }} {% for d in acme_summary.installed | default([]) %}{{ d.domain }} {% endfor %}
-      {{ color_yellow }}🔁 Renewed:  {{ color_reset }}{% for d in acme_summary.renewed | default([]) %}{{ d.domain }} {% endfor %}
-      {{ color_gray }}⏸️ Skipped:  {{ color_reset }}{% for d in acme_summary.skipped | default([]) %}{{ d.domain }} {% endfor %}
-      {{ color_cyan }}🗑️ Removed:  {{ color_reset }}{% for d in acme_summary.removed | default([]) %}{{ d.domain }} {% endfor %}
-      {{ color_red }}❌ Failed:   {{ color_reset }}{% for d in acme_summary.failed | default([]) %}{{ d.domain }} {% endfor %}
-      ─────────────────────────────────────────────
+      ✅ Installed: {{ acme_summary.installed | length }}
+      🔁 Renewed:   {{ acme_summary.renewed | length }}
+      ⏭️  Skipped:   {{ acme_summary.skipped | length }}
+      ❌ Failed:    {{ acme_summary.failed | length }}
+      --------------------------------------------------------------------
+
+      {% macro validity_text(days) -%}
+        {% set d = (days | int) %}
+        {% if d == -1 %}
+          n/a
+        {% elif d <= 10 %}
+          {{ d }} days 🔴 (URGENT)
+        {% elif d <= 30 %}
+          {{ d }} days 🟡 (RENEW SOON)
+        {% else %}
+          {{ d }} days ✅
+        {% endif %}
+      {%- endmacro %}
+
+      {% macro compare_plan(domain, actual_status) -%}
+        {% set expected = plan_data.get(domain, {}).get('action', 'UNKNOWN') %}
+        {% if expected == 'REMOVE' and actual_status in ['failed'] %}
+          Planned REMOVE → ❌ FAILED
+        {% elif expected == 'REMOVE' and actual_status not in ['failed'] %}
+          Planned REMOVE → ✅ REMOVED
+        {% elif expected in ['INSTALL','RENEW'] and actual_status in ['installed','renewed'] %}
+          Planned {{ expected }} → ✅ SUCCESS
+        {% elif expected in ['INSTALL','RENEW'] and actual_status in ['failed'] %}
+          Planned {{ expected }} → ❌ FAILED
+        {% else %}
+          Planned {{ expected }} → ⏭️ SKIPPED
+        {% endif %}
+      {%- endmacro %}
+
+      {% for cat, emoji, label in [
+          ('installed', '✅', 'INSTALLED'),
+          ('renewed', '🔁', 'RENEWED'),
+          ('skipped', '⏭️', 'SKIPPED'),
+          ('failed', '❌', 'FAILED')
+      ] %}
+      {% if acme_summary[cat] | length > 0 %}
+      {{ emoji }} {{ label }}
+      {% for d in acme_summary[cat] %}
+        ▶ {{ d.domain }}
+           Domains: {{ d.domains | join(', ') }}
+           Status: {{ label }} {{ emoji }}
+           {{ compare_plan(d.domain, cat) }}
+           Validity: {{ validity_text(d.new_days_remaining | default(-1)) }}
+           Cert path: {{ d.live_cert_path | default('n/a') }}
+           {% if cat == 'failed' %}
+           Return codes: issue={{ d.rc_issue }}, pkcs={{ d.rc_pkcs }}, deploy={{ d.rc_deploy }}
+           {% endif %}
+      {% endfor %}
+      --------------------------------------------------------------------
       {% endif %}
-  tags: summary
+      {% endfor %}
 
-- name: "ℹ️ Legend"
-  ansible.builtin.debug:
-    msg: |
-      {{ '\033[0;32m' }}✅ Installed{{ '\033[0m' }} — new certificates successfully issued and deployed
-      {{ '\033[0;33m' }}🔁 Renewed{{ '\033[0m' }} — existing certificates successfully renewed
-      {{ '\033[0;37m' }}⏸️ Skipped{{ '\033[0m' }} — issuance skipped (still valid)
-      {{ '\033[0;36m' }}🗑️ Removed{{ '\033[0m' }} — certificates and tracking successfully deleted
-      {{ '\033[0;31m' }}❌ Failed{{ '\033[0m' }} — one or more steps failed
-  run_once: true
+      🕓 Report generated: {{ ansible_date_time.iso8601 }}
+      ════════════════════════════════════════════════════════════════════
+  when: acme_summary is defined
   tags: summary
 

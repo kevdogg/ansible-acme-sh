@@ -1,0 +1,62 @@
+---
+# COMPACT PLAN SUMMARY — visual preflight overview with optional delta comparison
+# ------------------------------------------------------------------------------
+# Shows planned actions and optionally compares them to what was actually executed.
+
+- name: PLAN SUMMARY — Compact preflight table
+  vars:
+    cat_icons:
+      INSTALL: "🟢"
+      REMOVE:  "🔵"
+    install_count: "{{ acme_plan_summary.installs | default(0) }}"
+    renew_count: "{{ acme_plan_summary.renews | default(0) }}"
+    remove_count: "{{ acme_plan_summary.removes | default(0) }}"
+    total_count: "{{ acme_plan_summary.total | default(0) }}"
+    default_pw_count: "{{ acme_plan_summary.default_pw_count | default(0) }}"
+    _actual_domains: "{{ (acme_summary.installed + acme_summary.renewed + acme_summary.removed + acme_summary.failed + acme_summary.skipped)
+                        | map(attribute='domains')
+                        | list | flatten | unique | default([]) }}"
+    _planned_domains: "{{ acme_plan_summary.domains | default([]) }}"
+    _unprocessed: "{{ _planned_domains | difference(_actual_domains) }}"
+  ansible.builtin.debug:
+    msg: |
+      ╭──────────────────────────────────────────────────────────────╮
+      │             🌐 ACME Certificate Preflight Summary             │
+      ╰──────────────────────────────────────────────────────────────╯
+
+      📊 **Planned Actions**
+      ────────────────────────────────
+      🟢 {{ install_count }} install(s)
+      🟡 {{ renew_count }} force renew(s)
+      🔵 {{ remove_count }} remove(s)
+      ⚠️  {{ default_pw_count }} using default PKCS#12 password
+      ────────────────────────────────
+      Total domains in plan: {{ total_count }}
+
+      {% if total_count | int == 0 %}
+      ⚠️  No domains to process.
+      {% endif %}
+
+      ────────────────────────────────
+
+      {% for domain, meta in acme_plan_summary.domain_actions.items() %}
+      {{ cat_icons[meta.action] | default('⚪') }} {{ domain }} → {{ meta.action }}
+      {% endfor %}
+
+      {% if acme_sh_show_plan_deltas | default(true) and _unprocessed | length > 0 %}
+      ────────────────────────────────
+      ⚠️  Planned but not processed (not yet in scoreboard):
+      {% for d in _unprocessed %}
+        • {{ d }}
+      {% endfor %}
+      {% endif %}
+
+      ────────────────────────────────
+      Legend:
+        🟢 INSTALL / RENEW
+        🔵 REMOVE
+        ⚠️  Default password in use ('pass')
+        🆕  No existing certificate
+  when: acme_plan_summary is defined
+  tags: plan
+

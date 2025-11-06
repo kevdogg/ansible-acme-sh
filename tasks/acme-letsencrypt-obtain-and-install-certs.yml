@@ -87,8 +87,8 @@
 #    - item.domains is defined and item.domains | length > 0
 #    - not (item.remove|default(false)|bool)
 #    - not acme_sh_uninstall|default(false)|bool
-##    - not (item.force_renew|default(false)|bool)
-##    - not (item.custom_command|default(false)|bool)
+##    - not item.force_renew|default(false)|bool 
+##    - not item.custom_command|default(false)|bool
 #  become_user: "{{ acme_sh_become_user }}"
 #  register: issue_result
 #  changed_when: issue_result.rc == 0 and "Cert success" in issue_result.stdout
@@ -467,26 +467,26 @@
 #  become_user: "{{ acme_sh_become_user }}"
 #  register: pkcs12_create_result
 
-- name: Register acme.sh certificate information
-  command: ./acme.sh --list
-  args:
-    chdir: "{{ acme_sh_default_directory }}"
-  when: 
-    - acme_sh_list_domains | default(true) | bool
-    - not acme_sh_uninstall or acme_sh_uninstall|bool == false
-  changed_when: False
-  register: list_domains
-  become_user: "{{ acme_sh_become_user }}"
-
-- name: List acme.sh certificate information
-  ansible.builtin.debug:
-    var: list_domains.stdout_lines
-  when:
-#    - not ansible_check_mode | default(false) | bool
-    - acme_sh_list_domains | default(true) | bool
-    - not acme_sh_uninstall or acme_sh_uninstall|bool == false
-  tags:
-    - debug
+#- name: Register acme.sh certificate information
+#  command: ./acme.sh --list
+#  args:
+#    chdir: "{{ acme_sh_default_directory }}"
+#  when: 
+#    - acme_sh_list_domains | default(true) | bool
+#    - not acme_sh_uninstall or acme_sh_uninstall|bool == false
+#  changed_when: False
+#  register: list_domains
+#  become_user: "{{ acme_sh_become_user }}"
+#
+#- name: List acme.sh certificate information
+#  ansible.builtin.debug:
+#    var: list_domains.stdout_lines
+#  when:
+##    - not ansible_check_mode | default(false) | bool
+#    - acme_sh_list_domains | default(true) | bool
+#    - not acme_sh_uninstall or acme_sh_uninstall|bool == false
+#  tags:
+#    - debug
 
 #- name: Copy pcks12 file back to /root/.acme.sh/<certificate_directory> if pcks12 file exist
 #  ansible.builtin.include_tasks:

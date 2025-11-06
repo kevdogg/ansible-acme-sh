@@ -41,6 +41,31 @@
         | default(0)
       }}
 
+- name: Force renew acme.sh certificate(s)
+  vars:
+    acme_exe: "{{ acme_sh_bin }}"
+  ansible.builtin.shell: >-
+    {{
+      acme_exe ~ ' --renew -d ' ~ item.domains | first ~ ' --force' ~
+      ( " --debug" if item.debug | default(acme_sh_default_debug | default(False)) | bool else "" ) ~
+      (" --ecc" if (item.acme_sh_extra_flags_renew
+              | default(acme_sh_default_extra_flags_renew)
+              | default(''))
+              | regex_search('(^|\\s)--ecc(\\s|$)')
+      else "")
+    }}
+  args:
+    chdir: "{{ acme_sh_directory_resolved }}"
+    executable: "{{ bash_executable_path }}"
+  register: renew_result
+  changed_when: renew_result.rc == 0
+  failed_when: renew_result.rc != 0 and "Reload error for" not in (renew_result.stderr | default(''))
+  become: true
+  become_user: "{{ acme_sh_become_user | default(omit) }}"
+  when:
+    - item.force_renew | default(false) | bool
+    - not item.custom_command | default (false) | bool
+
 # ISSUE / RENEW
 - name: Issue acme.sh certificate(s) (this will sleep for dns_sleep seconds)
   vars:
@@ -82,6 +107,8 @@
   when:
     - (item.dns_provider | default(acme_sh_default_dns_provider)) | length > 0
     - (item.dns_provider_api_keys | default(acme_sh_default_dns_provider_api_keys)) | length > 0
+    - not item.force_renew | default(false) | bool
+    - not item.custom_command | default (false) | bool
 
 # AFTER
 - name: Stat live cert candidates (after)
@@ -113,9 +140,10 @@
     cert_was_renewed: >-
       {{
         (
-          "Cert success" in issue_result.stdout
-          or "Renew" in issue_result.stdout
-          or "Create new certificate" in issue_result.stdout
+          ("Cert success" in (issue_result.stdout | default(''))) or
+          ("Renew" in (issue_result.stdout | default(''))) or
+          ("Create new certificate" in (issue_result.stdout | default(''))) or
+          (item.force_renew | default(false) | bool)
         )
         and (acme_live_cert_mtime_after | int) > (acme_live_cert_mtime_before | int)
       }}
@@ -200,6 +228,30 @@
   become: true
   become_user: "{{ acme_sh_become_user | default(omit) }}"
 
+# ----------------------------------------------------------------------
+# POST-DEPLOY: record validity after certificate has been installed
+# ----------------------------------------------------------------------
+
+- name: Record certificate validity after deploy
+  ansible.builtin.command: >
+    {{ acme_sh_bin }} --list
+  register: acme_post_list
+  changed_when: false
+  failed_when: false
+  become: true
+  become_user: "{{ acme_sh_become_user | default(omit) }}"
+
+# Parse the acme.sh --list output into structured facts
+- name: Parse ACME certificate list (after deploy)
+  ansible.builtin.include_tasks: parse-acme-list.yml
+
+# Extract a simpler variable for readability
+- name: Save post-deploy certificate info
+  ansible.builtin.set_fact:
+    acme_post_cert_info: "{{ acme_list_days_until_renew }}"
+  when:
+    - acme_list_days_until_renew is defined
+
 # SCOREBOARD
 - name: Set per-domain result
   ansible.builtin.set_fact:
@@ -207,27 +259,41 @@
       {{
         (
           'failed' if (
-            issue_result.rc != 0
-            or pkcs_result.rc != 0
-            or deploy_result.rc != 0
+            (issue_result.rc | default(0)) != 0
+            or (renew_result.rc | default(0)) != 0
+            or (pkcs_result.rc | default(0)) != 0
+            or (deploy_result.rc | default(0)) != 0
           ) else (
             'renewed' if cert_was_renewed
-            else 'skipped' if ('Skip' in issue_result.stdout)
+            else 'skipped' if ('Skip' in (issue_result.stdout | default('')))
             else 'installed'
           )
         )
+      }}
+    reason_failed: >-
+      {{
+        'issue'  if (issue_result.rc | default(0)) != 0 else
+        'renew'  if (renew_result.rc | default(0)) != 0 else
+        'pkcs12' if (pkcs_result.rc | default(0)) != 0 else
+        'deploy' if (deploy_result.rc | default(0)) != 0 else
+        omit
       }}
     acme_domain_result:
       domain: "{{ item.domains[0] }}"
       domains: "{{ item.domains }}"
       status: "{{ acme_domain_status }}"
-      rc_issue: "{{ issue_result.rc }}"
-      rc_pkcs: "{{ pkcs_result.rc }}"
-      rc_deploy: "{{ deploy_result.rc }}"
+      reason_failed: "{{ reason_failed | default(omit) }}"
+      rc_issue: "{{ issue_result.rc | default(omit) }}"
+      rc_renew: "{{ renew_result.rc | default(omit) }}"
+      rc_pkcs: "{{ pkcs_result.rc | default(omit) }}"
+      rc_deploy: "{{ deploy_result.rc | default(omit) }}"
       stdout_issue: "{{ issue_result.stdout | default('') }}"
+      stdout_renew: "{{ renew_result.stdout | default('') }}"
       live_cert_path: "{{ acme_live_cert_path_after }}"
       force_renew: "{{ item.force_renew | default(false) }}"
-  when: issue_result is defined
+      new_days_remaining: "{{ acme_post_cert_info[item.domains[0]] | default(omit) }}"
+  when:
+    - issue_result is defined or renew_result is defined
 
 - name: Append result to scoreboard buckets
   ansible.builtin.set_fact:

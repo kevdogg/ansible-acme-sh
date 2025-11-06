@@ -1,0 +1,131 @@
+---
+# Purpose: Parse the output of `acme.sh --list` into structured facts.
+# Supports both the old pipe-table and new space-column formats.
+
+# Input: expects a prior task like:
+# - name: Get ACME list
+#   ansible.builtin.command: "{{ acme_sh_bin }} --list"
+#   register: acme_list
+#   changed_when: false
+#   failed_when: false
+#
+# Output facts:
+#   acme_list_details: full structured data
+#   acme_list_days_until_renew: simple map of domain -> days remaining
+
+- name: Normalize lines and detect format
+  ansible.builtin.set_fact:
+    _all_lines: "{{ acme_list.stdout_lines | reject('match', '^\\s*$') | list }}"
+    _is_pipe_table: "{{ _all_lines | select('match', '^\\|') | list | length > 0 }}"
+  when: acme_list is defined
+
+# -------------------------------------------------------------------------
+# PARSER: NEW FORMAT (space-column)
+# Example:
+# Main_Domain  KeyLength  SAN_Domains  CA  Created  Renew
+# authelia.example.com "2048" no LetsEncrypt.org 2025-09-26T05:38:07Z 2025-11-25T05:38:07Z
+# -------------------------------------------------------------------------
+- name: Parse NEW acme.sh --list format
+  when:
+    - _all_lines | length > 0
+    - not _is_pipe_table
+  vars:
+    _rows_raw: "{{ _all_lines[1:] }}"     # skip header line
+    _rows_split: >-
+      {{
+        _rows_raw
+        | map('regex_replace', '\\s+', ' ')
+        | map('trim')
+        | map('split', ' ')
+        | list
+      }}
+    # column positions: 0=Main_Domain, 4=Created, 5=Renew
+    _mapped: >-
+      {{
+        _rows_split
+        | map('extract', {0: 'domain', 4: 'created', 5: 'renew'})
+        | map('combine', {})
+        | map('combine', {
+            'days_until_renew': (
+              ((item.renew | to_datetime) - (ansible_date_time.iso8601 | to_datetime)).days
+            )
+          })
+        | list
+      }}
+  ansible.builtin.set_fact:
+    acme_list_details: >-
+      {{
+        dict(_mapped | map('community.general.dict_kv', 'key', attribute='domain', 'value', default=None) | list)
+      }}
+
+# -------------------------------------------------------------------------
+# PARSER: OLD FORMAT (pipe-table)
+# Example:
+# | Main_Domain | SAN_Domains | Created | Renew | Days_remaining | CA |
+# -------------------------------------------------------------------------
+- name: Parse OLD acme.sh --list format
+  when: _is_pipe_table
+  vars:
+    _lines: >-
+      {{
+        _all_lines
+        | select('match', '^\\|')
+        | map('regex_replace', '^\\|\\s*', '')
+        | map('regex_replace', '\\s*\\|$', '')
+        | map('split', '|')
+        | map('map', 'trim')
+        | list
+      }}
+    _header: "{{ _lines[0] | map('trim') | list }}"
+    _rows: "{{ _lines[1:] }}"
+    _domain_key: >-
+      {{
+        (_header | select('search', 'Main[ _]Domain') | list | first) | default('Main_Domain')
+      }}
+    _created_key: >-
+      {{
+        (_header | select('search', 'Created') | list | first) | default('Created')
+      }}
+    _renew_key: >-
+      {{
+        (_header | select('search', 'Renew') | list | first) | default('Renew')
+      }}
+    _rowdicts: >-
+      {{
+        _rows
+        | map('zip', _header)
+        | map('items')
+        | map('dict')
+        | list
+      }}
+    _mapped: >-
+      {{
+        _rowdicts
+        | map('extract', {_domain_key: 'domain', _created_key: 'created', _renew_key: 'renew'})
+        | map('combine', {})
+        | map('combine', {
+            'days_until_renew': (
+              ((item.renew | to_datetime) - (ansible_date_time.iso8601 | to_datetime)).days
+            )
+          })
+        | list
+      }}
+  ansible.builtin.set_fact:
+    acme_list_details: >-
+      {{
+        dict(_mapped | map('community.general.dict_kv', 'key', attribute='domain', 'value', default=None) | list)
+      }}
+
+# -------------------------------------------------------------------------
+# DERIVED FLAT MAP: { domain: days_until_renew }
+# -------------------------------------------------------------------------
+- name: Derive simple map of domain -> days_until_renew
+  when: acme_list_details is defined
+  ansible.builtin.set_fact:
+    acme_list_days_until_renew: >-
+      {{
+        acme_list_details | dict2items
+        | map('combine', {'value': item.value.days_until_renew})
+        | items2dict(key='key', value='value')
+      }}
+

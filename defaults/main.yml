@@ -23,20 +23,20 @@ acme_sh_default_install_directory_permissions: "0755"
 
 acme_sh_dependencies: ["cron", "git", "wget", "curl", "openssl"]
 
-acme_sh_git_version: "master"
-acme_sh_git_url: "https://github.com/acmesh-official/acme.sh.git"
+acme_sh_default_git_version: "master"
+acme_sh_default_git_url: "https://github.com/acmesh-official/acme.sh.git"
 # acme_sh_git_clone_dest: "/usr/local/src/acme.sh"
-acme_sh_git_clone_dest: "/root/git/acme.sh"
-acme_sh_git_clone_force: false
+acme_sh_default_git_clone_dest: "/root/git/acme.sh"
+acme_sh_default_git_clone_force: false
 
 acme_sh_upgrade: true
 acme_sh_uninstall: false
 
-acme_sh_account_email: "{{ vault_acme_sh_account_email }}"
+acme_sh_default_account_email: "{{ vault_acme_sh_account_email }}"
 
 acme_sh_renew_time_in_days: 30
 
-acme_sh_copy_certs_to_path: "/etc/ssl/letsencrypt"
+acme_sh_default_copy_certs_to_path: "/etc/ssl/letsencrypt"
 acme_sh_default_pkcs12_password: "pass"
 
 acme_sh_list_domains: true
@@ -45,8 +45,10 @@ acme_sh_default_staging: true
 
 acme_sh_default_force_issue: false
 acme_sh_default_force_renew: false
+acme_sh_default_force_renew_all: false
 
 acme_sh_default_debug: false
+acme_sh_default_show_plan_deltas: true
 
 acme_sh_default_dns_provider: "dns_cf"
 acme_sh_default_dns_provider_api_keys:
@@ -88,7 +90,14 @@ acme_sh_notify_env_var:
   "MAILGUN_API_DOMAIN": "{{ vault_mailgun_api_domain }}"
   "MAILGUN_FROM": "{{ 'acme-' + ansible_fqdn + '@' + vault_mailgun_api_domain }}"
   "MAILGUN_TO": "{{ vault_mailgun_to }}"
-acme_sh_notify_level: 2
+
+#--notify-level <0|1|2|3>: Sets the level of notification detail.
+#  0: Disabled, no notifications.
+#  1: Notifications only on errors.
+#  2: Notifications on successful renewals or errors (default).
+#  3: Notifications on skipped, renewed, or error events.
+
+acme_sh_notify_level: 3
 acme_sh_notify_mode: 0
 
 # Domain Dynamic section - These variables most likely to be placed in host variables section

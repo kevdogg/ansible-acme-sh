@@ -1,5 +1,7 @@
 ---
-
+########################
+# PreTasks
+#######################
 - name: Debug to Show all ansible variable
   ansible.builtin.debug:
     msg: item
@@ -10,25 +12,8 @@
 
 # Prepare a structure for tracking results
 # Lists will be appended during execution
-- name: Initialize scoreboard structure
-  ansible.builtin.set_fact:
-    acme_summary:
-      installed: []
-      renewed: []
-      removed: []
-      failed: []
-  when: acme_summary is not defined
-
-
-- name: acme.sh Plan
-  ansible.builtin.include_tasks:
-    file: acme-plan.yml
-    apply:
-      tags: plan
-    tags: plan
-
 - name: Initialize ACME summary scoreboard
-  set_fact:
+  ansible.builtin.set_fact:
     acme_summary:
       installed: "{{ acme_summary.installed | default([]) }}"
       renewed: "{{ acme_summary.renewed | default([]) }}"
@@ -37,70 +22,83 @@
       failed: "{{ acme_summary.failed | default([]) }}"
   tags: always
 
-- name: Install Block
-  block:
+- name: acme.sh Plan
+  ansible.builtin.include_tasks:
+    file: acme-plan.yml
+  tags: plan
 
-  ### Install acme.sh if not installed and setup Directory Structure
-  ### Includes Force renew and acme.sh custom command
-  - name: Install acme.sh
-    ansible.builtin.include_tasks:
-      file: acme-letsencrypt-install-acme-sh.yml
-      apply:
-        tags: install_acme.sh
-#    when:
-#      - not acme_sh_uninstall or acme_sh_uninstall|bool == false
-    tags: install_acme.sh
+# Show preflight summary
+- name: Display preflight plan summary
+  ansible.builtin.include_tasks: plan-summary-compact.yml
+  tags: plan
 
-  ### Obtain and Install acme.sh certs
-  - name: Obtain and Install/Renew acme.sh certificates
-    ansible.builtin.include_tasks:
-      file: acme-letsencrypt-obtain-and-install-certs.yml
-#    when:
-#      - not acme_sh_uninstall or acme_sh_uninstall|bool == false
-      apply:
-        tags:
-          - install_or_renew_certificates
-    tags:
-      - install_or_renew_certificates
-    
-  ### Install systemd acme_letsencrypt service and timer templates
-  - name: Install acme_letsencrypt service and timer templates to /etc/systemd/system
-    ansible.builtin.include_tasks:
-      file: systemd-install-templates.yml
-      apply:
-        tags: systemd_install_templates
-#    when:
-#      - not acme_sh_uninstall or acme_sh_uninstall|bool == false
-    tags:
-      - systemd_install_templates
+########################
+# Issue/Renew Phase
+#######################
 
-  ### Start systemd acme.sh timer for certificate renewals
-  - name: Start acme.sh certificate(s) systemd timers
-    ansible.builtin.include_tasks:
-      file: systemd-start-renewals.yml
-      apply:
-        tags: systemd_start
-#    when:
-#      - not acme_sh_uninstall or acme_sh_uninstall|bool == false
-    tags:
-      - systemd_start
-
-  when:
-    - not acme_sh_uninstall or acme_sh_uninstall|bool == false
-
-### Remove/Inactivate Processes
-- name: Process ACME domain removals
-  ansible.builtin.include_tasks: acme_domain_remove.yml
+### Install acme.sh if not installed and setup Directory Structure
+### Includes Force renew and acme.sh custom command
+- name: Install acme.sh
+  ansible.builtin.include_tasks:
+    file: acme-letsencrypt-install-acme-sh.yml
   loop: "{{ acme_sh_domains }}"
   loop_control:
     label: "{{ item.domains[0] }}"
   when:
     - acme_sh_domains is defined
     - acme_sh_domains | length > 0
-    - item.domains is defined
-    - item.domains | length > 0
-    - item.remove | default(false)
-    - not acme_sh_uninstall or acme_sh_uninstall|bool == false
+    - not item.remove | default(false)
+    - not acme_sh_uninstall|default(false)|bool
+  tags: install_acme.sh
+
+### Issue/Renew and Deploy acme.sh certs
+- name: Obtain and Install/Renew acme.sh certificates
+  ansible.builtin.include_tasks:
+    file:  acme_domain_workflow.yml
+  loop: "{{ acme_sh_domains }}"
+  loop_control:
+    label: "{{ item.domains[0] }}"
+  when:
+    - acme_sh_domains is defined and acme_sh_doamin | length > 0
+    - item.domains is defined and item.domains | length > 0
+    - not item.remove | default(false) | bool
+    - not acme_sh_uninstall|default(false)|bool
+ 
+
+### Install systemd acme_letsencrypt service and timer templates - (Per Host Task)
+- name: Install acme_letsencrypt service and timer templates to /etc/systemd/system
+  ansible.builtin.include_tasks:
+    file: systemd-install-templates.yml
+    when:
+      - not acme_sh_uninstall | default(false) | bool
+    tags:
+      - systemd_install
+
+
+### Start systemd acme.sh timer for certificate renewals - (Per Host Task)
+- name: Start acme.sh certificate(s) systemd timers
+  ansible.builtin.include_tasks:
+    file: systemd-start-renewals.yml
+  when:
+    - not acme_sh_uninstall | default(false) | bool
+  tags:
+    - systemd_start
+
+########################
+# Remove Phase
+#######################
+
+### Remove/Inactivate Certificates
+- name: Process ACME domain removals
+  ansible.builtin.include_tasks: acme_domain_remove.yml
+  loop: "{{ acme_sh_domains }}"
+  loop_control:
+    label: "{{ item.domains[0] }}"
+  when:
+    - acme_sh_domains is defined and acme_sh_domains | length > 0
+    - item.domains is defined and item.domains | length > 0
+    - item.remove | default(false) | bool
+    - not acme_sh_uninstall | default(false) | bool
 
 
 

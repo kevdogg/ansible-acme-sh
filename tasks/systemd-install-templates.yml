@@ -15,36 +15,26 @@
   ansible.builtin.template:
     src: acme_letsencrypt.service.j2
     dest: "{{ systemd_files_location | default('/etc/systemd/system', true) }}/{{ systemd_service_name | default('acme_letsencrypt.service', true) }}"
-    checksum: ""
     force: true
     owner: root
     group: root
     mode: 0644
-  when:
-#    - not is_acme_letsencrypt_service_installed.stat.exists
-    - not acme_sh_uninstall or acme_sh_uninstall|bool == false
-  become: yes
+  become: true
   become_user: "{{ acme_sh_become_user }}"
 
 - name: Install {{ systemd_timer_name }}.timer
   ansible.builtin.template:
     src: acme_letsencrypt.timer.j2
     dest: "{{ systemd_files_location | default('/etc/systemd/system', true) }}/{{ systemd_timer_name | default('acme_letsencrypt.timer', true) }}"
-    checksum: ""
     force: true
     owner: root
     group: root
     mode: 0644
-  when:
-#    - not is_acme_letsencrypt_timer_installed.stat.exists
-    - not acme_sh_uninstall or acme_sh_uninstall|bool == false
-  become: yes
+  become: true
   become_user: "{{ acme_sh_become_user }}"
 
 - name: Systemd Daemon Reload
   ansible.builtin.systemd_service:
     daemon_reload: true
-  when:
-    - not acme_sh_uninstall or acme_sh_uninstall|bool == false
-  become:
+  become: true
   become_user: "{{ acme_sh_become_user }}"

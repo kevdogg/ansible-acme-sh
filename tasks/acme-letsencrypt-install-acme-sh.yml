@@ -1,59 +1,84 @@
 ---
+- name: Resolve acme.sh directory (with host override support)
+  ansible.builtin.set_fact:
+    acme_sh_directory_resolved: >-
+      {{
+        (
+          acme_sh_directory
+          | default(acme_sh_default_directory, true)
+        )
+        | expanduser
+      }}
+
+- name: Determine bash executable path
+  ansible.builtin.command: which bash
+  register: bash_path_result
+  # Use a simple failed_when to ensure 'bash' was found
+  failed_when: bash_path_result.rc != 0
+  changed_when: false
+
+- name: Set bash_executable_path fact with ternary fallback
+  ansible.builtin.set_fact:
+    bash_executable_path: >-
+      {{ 
+        (bash_path_result.rc == 0)
+        | ternary(bash_path_result.stdout | trim, '/usr/bin/bash') 
+      }}
+
 - name: Determine if acme.sh is installed
   ansible.builtin.stat:
-    path: "{{ acme_sh_default_executable }}"
+    path: "{{ acme_sh_bin }}"
   register: is_acme_sh_installed
-  when:
-    - not acme_sh_uninstall or acme_sh_uninstall|bool == false
+  become: true
   become_user: "{{ acme_sh_become_user }}"
 
 - name: Create  acme.sh path if acme.sh does not exist
   ansible.builtin.file:
-    path: "{{ acme_sh_default_directory }}"
+    path: "{{ acme_sh_directory_resolved }}"
     state: directory
     mode: '0755'
   when:
-    - not is_acme_sh_installed.stat.exists
-    - not acme_sh_uninstall or acme_sh_uninstall|bool == false
+    - not (is_acme_sh_installed.stat.exists | bool)
+  become: true
   become_user: "{{ acme_sh_become_user }}"
 
 - name: Determine if acme.sh git repository is cloned locally
   ansible.builtin.stat:
-    path: "{{ acme_sh_git_clone_dest }}"
+    path: "{{ item.acme_sh_git_clone_dest | default(acme_sh_default_git_clone_dest) }}"
   register: is_acme_sh_cloned_locally
-  when:
-    - not acme_sh_uninstall or acme_sh_uninstall|bool == false
+  become: true
   become_user: "{{ acme_sh_become_user }}"
 
 - name: Create acme.sh git clone directory if it does not exits
   ansible.builtin.file:
-    path: "{{ acme_sh_git_clone_dest }}"
+    path: "{{ item.acme_sh_git_clone_dest | default(acme_sh_default_git_clone_dest) }}"
     state: directory
     mode: '0755'
   when:
-    - not acme_sh_uninstall or acme_sh_uninstall|bool == false
-    - not is_acme_sh_cloned_locally.stat.exists
+    - not (is_acme_sh_cloned_locally.stat.exists | bool)
+  become: true
   become_user: "{{ acme_sh_become_user }}"
 
 - name: Git Clone https://github.com/acmesh-official/acme.sh.git
   ansible.builtin.git:
-    repo: "{{ acme_sh_git_url }}"
+    repo: "{{ item.acme_sh_git_url | default(acme_sh_default_git_url) }}"
     depth: 1
     clone: true
-    dest: "{{ acme_sh_git_clone_dest }}"
+    force: "{{ (item.acme_sh_git_clone_force | default(acme_sh_default_git_clone_force | default(false))) | bool }}"
+    dest: "{{ item.acme_sh_git_clone_dest | default(acme_sh_default_git_clone_dest) }}"
+    version: "{{ item.acme_sh_git_version | default(acme_sh_default_git_version) }}"
   when:
     - is_acme_sh_cloned_locally.stat.exists == false
-    - not acme_sh_uninstall or acme_sh_uninstall|bool == false
+  become: true
   become_user: "{{ acme_sh_become_user }}"
 
 - name: Update Git Clone https://github.com/acmesh-official/acme.sh.git if already exists
   ansible.builtin.git:
-    repo: "{{ acme_sh_git_url }}"
+    repo: "{{ item.acme_sh_git_url | default(acme_sh_default_git_url) }}"
     update: true
     clone: no
-    dest: "{{ acme_sh_git_clone_dest }}"
-  when:
-    - not acme_sh_uninstall or acme_sh_uninstall|bool == false
+    dest: "{{ item.acme_sh_git_clone_dest | default(acme_sh_default_git_clone_dest) }}"
+  become: true
   become_user: "{{ acme_sh_become_user }}"
 
 # - name: get https://raw.githubusercontent.com/acmesh-official/acme.sh/{{ acme_sh_git_version }}/acme.sh
@@ -68,67 +93,97 @@
 #  become_user: "{{ acme_sh_become_user }}"
 
 - name: Install acme.sh
+  vars:
+    acme_exe: "{{ acme_sh_bin }}"
   ansible.builtin.shell: >-
-    {{ acme_sh_git_clone_dest }}/acme.sh --install
-    {{ "--accountemail " + acme_sh_account_email if acme_sh_account_email else "" }}
-    {{ "--home " + acme_sh_default_directory if acme_sh_default_directory else "/root/.acme.sh" }}
-    --nocron
+    (item.acme_sh_git_clone_dest | default(acme_sh_default_git_clone_dest)) ~ '/acme.sh --install' ~
+    ' --accountemail ' ~ (item.acme_sh_account_email | default(acme_sh_default_account_email)) ~
+    ' --home ' ~ acme_sh_directory_resolved ~
+    ' --nocron'
   args:
-    chdir: "{{ acme_sh_git_clone_dest }}"
-    creates: "{{ acme_sh_default_executable }}"
+    chdir: "{{ item.acme_sh_git_clone_dest | default(acme_sh_default_git_clone_dest) }}"
+    creates: "{{ acme_sh_bin }}"
   when:
-    - is_acme_sh_installed.stat.exists == false
-    - not acme_sh_uninstall or acme_sh_uninstall|bool == false
+    - not (is_acme_sh_installed.stat.exists | bool)
+  become: true
   become_user: "{{ acme_sh_become_user }}"
+  register: install_acme_sh_result
+  changed_when: install_acme_sh_result.rc == 0
+  failed_when: install_acme_sh_result.rc != 0
 
 
 - name: Upgrade acme.sh
-  ansible.builtin.command: ./acme.sh --upgrade --auto-upgrade
+  vars:
+    acme_exe: "{{ acme_sh_bin }}"
+  ansible.builtin.shell: >-
+    {{
+      acme_exe ~ ' --upgrade --auto-upgrade'
+    }}
   args:
-    chdir: "{{ acme_sh_default_directory }}"
+    chdir: "{{ acme_sh_directory_resolved }}"
+    executable: "{{ bash_executable_path }}"
   when:
-#    - is_acme_sh_installed.stat.exists == false
-    - acme_sh_upgrade or acme_sh_upgrade == true
-    - not acme_sh_uninstall or acme_sh_uninstall|bool == false
+#    - not (is_acme_sh_installed.stat.exists | bool)
+    - acme_sh_upgrade|default(true)|bool 
   register: upgrade_result
   changed_when: upgrade_result.rc == 0 and "Upgrade success" in upgrade_result.stdout
+  failed_when: upgrade_result.rc != 0
+  become: true
   become_user: "{{ acme_sh_become_user }}"
 
 - name: Use given CA authority - default Let'sEncrypt
-  ansible.builtin.command: ./acme.sh --set-default-ca --server {{ acme_sh_default_server }}
+  vars:
+    acme_exe: "{{ acme_sh_bin }}"
+  ansible.builtin.shell: >-
+    {{
+      acme_exe ~ ' --set-default-ca --server ' ~ 
+      (item.acme_sh_server | default(acme_sh_default_server | default('')))
+    }}
   args:
-    chdir: "{{ acme_sh_default_directory }}"
+    chdir: "{{ acme_sh_directory_resolved }}"
+    executable: "{{ bash_executable_path }}"
   when:
-    - is_acme_sh_installed.stat.exists == false
-    - not acme_sh_uninstall or acme_sh_uninstall|bool == false
+    - not (is_acme_sh_installed.stat.exists | bool)
+    - (item.acme_sh_server | default(acme_sh_default_server | default(''))) | length > 0
+  become: true
   become_user: "{{ acme_sh_become_user }}"
+  register: acme_default_server_result
+  changed_when: acme_default_server_result.rc == 0
+  failed_when: acme_default_server_result.rc != 0
 
-- name: Create acme.sh install directory
+
+- name: Create acme.sh install directory -- Default(/etc/ssl/letsencrypt)
   ansible.builtin.file:
-    path: "{{ acme_sh_copy_certs_to_path }}"
+    path: "{{ item.acme_sh_copy_certs_to_path | default(acme_sh_default_sh_copy_certs_to_path) }}"
     state: "directory"
     owner: "{{ acme_sh_become_user }}"
     group: "{{ acme_sh_become_user }}"
-    mode: "{{ acme_sh_default_install_directory_permissions }}"
-  when:
-    - not acme_sh_uninstall or acme_sh_uninstall|bool == false
+    mode: "{{ item.acme_sh_install_directory_permissions | default(acme_sh_default_install_directory_permissions) }}"
+  become: true
   become_user: "{{ acme_sh_become_user }}"
 
 - name: Enable acme.sh notification
-  ansible.builtin.command: >-
-    ./acme.sh --set-notify
-    --notify-level {{ acme_sh_notify_level }}
-    --notify-mode {{ acme_sh_notify_mode }}
-    {% for hook in acme_sh_notify_hooks %} --notify-hook {{ hook }} {% endfor %}
+  vars:
+    acme_exe: "{{ acme_sh_bin }}"
+  ansible.builtin.shell: >-
+    {{
+      acme_exe ~ ' --set-notify' ~
+      ' --notify-level ' ~ {{ acme_sh_notify_level }} ~
+      ' --notify-mode ' ~ {{ acme_sh_notify_mode }} ~
+      (acme_sh_notify_hooks | map('regex_replace', '^(.*)$', ' --notify-hook \\1') | join(''))
+    }}
   args:
-    chdir: "{{ acme_sh_default_directory }}"
+    chdir: "{{ acme_sh_directory_resolved }}"
+    executable: "{{ bash_executable_path }}"
   environment: "{{ acme_sh_notify_env_var }}"
   when:
-    - is_acme_sh_installed.stat.exists == false
+    - not (is_acme_sh_installed.stat.exists | bool)
     - acme_sh_enable_notify
     - acme_sh_notify_hooks | length > 0
     - acme_sh_notify_env_var.keys() | length > 0
-    - not acme_sh_uninstall or acme_sh_uninstall|bool == false
+  become: true
   become_user: "{{ acme_sh_become_user }}"
   register: acme_notify_result
+  changed_when: acme_notify_result.rc == 0
   failed_when: acme_notify_result.rc != 0
+  tags: notify
