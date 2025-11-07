@@ -1,7 +1,27 @@
 ---
-# COMPACT PLAN SUMMARY — visual preflight overview with optional delta comparison
-# ------------------------------------------------------------------------------
-# Shows planned actions and optionally compares them to what was actually executed.
+---
+# ============================================================================
+# acme-plan-summary-compact.yml
+# ----------------------------------------------------------------------------
+# Purpose:
+#   Generates a concise preflight summary (“PLAN” view) showing all domains
+#   scheduled for issuance, renewal, or removal. Highlights certificate health
+#   and renewal urgency using color-coded indicators.
+#
+# Scope:
+#   Executed during planning phase before any issuance or removal occurs.
+#   Pulls data from acme-plan.yml and summarizes actions for operator review.
+#
+# Notes:
+#   - Works with both modern (space-column) and legacy (pipe-table) acme.sh output.
+#   - Displays ✅🟡🔴 status indicators based on remaining certificate days.
+#   - Produces acme_plan_summary for later comparison to final execution results.
+#
+# Version: 2025.11.07 / compatible with acme.sh ≥ 3.0.8
+# Maintainer: KevDog
+# Tags: [acme, letsencrypt, plan, preflight, summary]
+# ============================================================================
+
 
 - name: PLAN SUMMARY — Compact preflight table
   vars:

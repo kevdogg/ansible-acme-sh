@@ -198,7 +198,7 @@
 
 # 9. PLAN — Compact visual summary
 - name: Include compact plan summary
-  ansible.builtin.include_tasks: plan-summary-compact.yml
+  ansible.builtin.include_tasks: acme-plan-summary-compact.yml
   when: acme_sh_domains | default([]) | length > 0
   tags: plan
 

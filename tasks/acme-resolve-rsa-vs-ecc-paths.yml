@@ -1,0 +1,59 @@
+---
+---
+# ============================================================================
+# acme-resolve-rsa-vs-ecc-paths.yml
+# ----------------------------------------------------------------------------
+# Purpose:
+#   Determines which certificate variant (RSA or ECC) applies to a given domain.
+#   Sets runtime facts that unify directory resolution for subsequent tasks:
+#     • acme_sh_directory_resolved
+#     • acme_sh_domain_resolved
+#     • acme_sh_cert_path_resolved
+#
+# Scope:
+#   Called from both workflow and removal tasks before per-domain operations.
+#
+# Notes:
+#   - Uses the custom ‘has_flag’ filter to detect the presence of --ecc in flags.
+#   - Default fallback is RSA (no _ecc suffix) if no ECC flag is found.
+#   - Keeps per-domain path resolution idempotent and predictable.
+#
+# Version: 2025.11.07 / compatible with acme.sh ≥ 3.0.8
+# Maintainer: KevDog
+# Tags: [acme, rsa, ecc, path, resolve, helper]
+# ============================================================================
+
+
+# acme-resolve-rsa-vs-ecc-paths.yml
+# Helper include for resolving acme.sh paths for a given domain
+# Safe to use inside loops (per-domain)
+# Expands "~" automatically and detects ECC vs RSA subfolder
+
+- name: Resolve acme.sh base directory (per host)
+  ansible.builtin.set_fact:
+    acme_sh_directory_resolved: >-
+      {{
+        (acme_sh_directory | default(acme_sh_default_directory, true))
+        | expanduser
+      }}
+
+- name: Resolve acme.sh domain subdirectory (per domain)
+  ansible.builtin.set_fact:
+    acme_sh_domain_resolved: >-
+      {{
+        item.domains[0]
+        ~ (
+          '_ecc'
+          if (
+            item.acme_sh_extra_flags
+            | default(acme_sh_default_extra_flags, true)
+            | has_flag('--ecc')
+          )
+          else ''
+        )
+      }}
+
+- name: Combine resolved base + domain into cert directory path
+  ansible.builtin.set_fact:
+    acme_sh_cert_path_resolved: "{{ acme_sh_directory_resolved }}/{{ acme_sh_domain_resolved }}"
+

@@ -1,4 +1,27 @@
 ---
+# ============================================================================
+# acme-parse-acme-list.yml
+# ----------------------------------------------------------------------------
+# Purpose:
+#   Parses `acme.sh --list` output into structured Ansible facts for use in plan
+#   and summary comparisons. Supports both new (space-separated) and legacy
+#   (pipe-table) formats automatically.
+#
+# Scope:
+#   Utility task file used by acme-plan.yml and acme-domain-workflow.yml.
+#   Produces reusable structured variables for certificate metadata.
+#
+# Notes:
+#   - Calculates days_remaining based on creation and renewal timestamps.
+#   - Sets acme_list_days_until_renew for downstream use.
+#   - Requires community.general ≥ 11.4.0 for dict_kv mapping.
+#
+# Version: 2025.11.07 / compatible with acme.sh ≥ 3.0.8
+# Maintainer: KevDog
+# Tags: [acme, parse, list, facts, utility]
+# ============================================================================
+
+
 # Purpose: Parse the output of `acme.sh --list` into structured facts.
 # Supports both the old pipe-table and new space-column formats.
 

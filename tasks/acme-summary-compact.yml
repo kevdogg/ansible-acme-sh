@@ -1,0 +1,179 @@
+---
+# ============================================================================
+# acme-summary-compact.yml
+# ----------------------------------------------------------------------------
+# Purpose:
+#   Produces the final compact report summarizing actual ACME operations per host.
+#   Displays the results of certificate installation, renewal, removal, and failure.
+#
+# Scope:
+#   Runs once after all domain tasks complete (post-loop summary).
+#   Compares final scoreboard data to the preflight plan when available.
+#
+# Notes:
+#   - Shows domain-by-domain status (✅ installed / ♻️ renewed / ⚠️ failed / 🗑️ removed).
+#   - Includes optional plan delta comparison when acme_plan_summary is defined.
+#   - Warnings from dual-cert detection are merged into the output.
+#   - Used as the final report task in tasks/main.yml.
+#
+# Version: 2025.11.07 / compatible with acme.sh ≥ 3.0.8
+# Maintainer: KevDog
+# Tags: [acme, letsencrypt, summary, postflight, report]
+# ============================================================================
+
+
+# Compact end-of-role summary with optional plan delta comparison
+# Requires:
+#   - acme_summary (always initialized at play start)
+#   - acme_plan_summary (from acme-plan.yml)
+#   - acme_sh_show_plan_deltas (defaults to true in defaults/main.yml)
+
+- name: SUMMARY — compact end-of-role overview
+  vars:
+    installed: "{{ acme_summary.installed | default([]) }}"
+    renewed:   "{{ acme_summary.renewed | default([]) }}"
+    removed:   "{{ acme_summary.removed | default([]) }}"
+    skipped:   "{{ acme_summary.skipped | default([]) }}"
+    failed:    "{{ acme_summary.failed | default([]) }}"
+    warnings:  "{{ acme_summary.warnings | default([]) }}"
+    uninstalled: "{{ acme_summary.uninstalled | default([]) }}"
+  ansible.builtin.debug:
+    msg: |
+      ================================
+      🔹 **ACME.SH SUMMARY — COMPACT**
+      ================================
+
+      ✅ Installed: {{ installed | length }}
+      🔁 Renewed:  {{ renewed | length }}
+      🗑️  Removed:  {{ removed | length }}
+      ⏭️  Skipped:  {{ skipped | length }}
+      ❌ Failed:   {{ failed | length }}
+      ⚠️  Warnings: {{ warnings | length }}
+      🚫 Uninstalled: {{ 'Yes' if (uninstalled is defined and uninstalled | length > 0) else 'No' }}
+
+      {% if installed %}
+      ✅ **Installed**
+      {% for e in installed %}
+        - {{ e.domain }}
+      {% endfor %}
+      {% endif %}
+
+      {% if renewed %}
+      🔁 **Renewed**
+      {% for e in renewed %}
+        - {{ e.domain }} ({{ e.new_days_remaining | default('?') }} days left)
+      {% endfor %}
+      {% endif %}
+
+      {% if removed %}
+      🗑️ **Removed**
+      {% for e in removed %}
+        - {{ e.domain }}
+      {% endfor %}
+      {% if ansible_verbosity | int >= 2 %}
+      ↳ Removed domains: {{ removed | map(attribute='domain') | join(', ') }}
+      {% endif %}
+      {% endif %}
+
+      {% if failed %}
+      ❌ **Failed**
+      {% for e in failed %}
+        - {{ e.domain }}
+      {% endfor %}
+      {% endif %}
+
+      {% if warnings %}
+      ⚠️ **Warnings**
+      {% for w in warnings %}
+        - {{ w.domain }} → {{ w.message }}
+      {% endfor %}
+      {% endif %}
+  tags: summary
+
+
+# ======================================================================
+# ENRICHED REMOVAL SUMMARY (added section)
+# ======================================================================
+- name: SUMMARY — removal overview (enriched)
+  vars:
+    removed_domains: >-
+      {{
+        removed | map(attribute='domain') | join(', ')
+        if removed | length > 0 else 'None'
+      }}
+    failed_removals: >-
+      {{
+        failed | map(attribute='domain') | join(', ')
+        if failed | length > 0 else 'None'
+      }}
+  ansible.builtin.debug:
+    msg: >-
+      {{
+        [
+          "🗑️ Removed certificates: " ~ (removed | length | default(0)),
+          "❌ Failed removals: " ~ (failed | length | default(0)),
+          "🚫 acme.sh uninstalled: " ~ (
+            'Yes' if (uninstalled is defined and uninstalled | length > 0) else 'No'
+          )
+        ]
+        +
+        (
+          ansible_verbosity | int >= 2
+          | ternary(
+              [
+                "   ↳ Removed domains: " ~ removed_domains,
+                "   ↳ Failed removals: " ~ failed_removals
+              ],
+              []
+            )
+        )
+      }}
+  when:
+    - removed is defined or uninstalled is defined
+  tags: [summary, remove_all]
+
+
+# ======================================================================
+# PLAN vs ACTUAL DELTAS
+# ======================================================================
+- name: SUMMARY — planned vs actual deltas
+  when:
+    - acme_sh_show_plan_deltas | default(true) | bool
+    - acme_plan_summary is defined
+  vars:
+    _planned_keys: "{{ acme_plan_summary.keys() | list }}"
+    _actual_keys: "{{ (acme_summary.installed + acme_summary.renewed + acme_summary.removed + acme_summary.failed) | map(attribute='domain') | list }}"
+    _missing: "{{ _planned_keys | difference(_actual_keys) }}"
+    _extra: "{{ _actual_keys | difference(_planned_keys) }}"
+  ansible.builtin.debug:
+    msg: |
+      ================================
+      🧭 **PLAN vs ACTUAL**
+      ================================
+      {% if not _missing and not _extra %}
+      ✅ All planned actions were executed successfully.
+      {% endif %}
+
+      {% if _missing %}
+      ⚠️  **Missing (planned but not processed):**
+      {% for d in _missing %}
+        - {{ d }}
+      {% endfor %}
+      {% endif %}
+
+      {% if _extra %}
+      ⚙️  **Extra (processed but not planned):**
+      {% for d in _extra %}
+        - {{ d }}
+      {% endfor %}
+      {% endif %}
+  tags: summary
+
+# ======================================================================
+# TIMESTAMP FOOTER (single run per play)
+# ======================================================================
+- name: SUMMARY — report timestamp
+  ansible.builtin.debug:
+    msg: "📅 Summary generated at: {{ ansible_date_time.iso8601 }} on {{ inventory_hostname }}"
+  run_once: true
+  tags: summary

@@ -1,0 +1,100 @@
+---
+- name: Validate custom CLI flag filters
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    base_cmd: "acme.sh --issue -d example.com --ecc"
+    extra_flags: "--force --debug"
+
+    # Expected outcomes for comparison
+    expected_has_force: true
+    expected_has_staging: false
+    expected_added_staging: "acme.sh --issue -d example.com --ecc --staging"
+    expected_removed_force: "acme.sh --issue -d example.com --ecc --debug"
+    expected_removed_both: "acme.sh --issue -d example.com --ecc"
+    expected_ensured_deduped: "acme.sh --issue -d example.com --ecc --force --debug"
+
+  tasks:
+
+    # ---------------------------------------------------------
+    # 🔍 Test has_flag()
+    # ---------------------------------------------------------
+    - name: 🔍 Test has_flag filter
+      ansible.builtin.set_fact:
+        test_has_force: "{{ extra_flags | has_flag('--force') }}"
+        test_has_staging: "{{ extra_flags | has_flag('--staging') }}"
+        test_has_any: "{{ extra_flags | has_flag(['--force', '--debug']) }}"
+
+    # ---------------------------------------------------------
+    # ➕ Test add_flag_if_missing()
+    # ---------------------------------------------------------
+    - name: ➕ Test add_flag_if_missing filter
+      ansible.builtin.set_fact:
+        test_added_staging: "{{ base_cmd | add_flag_if_missing('--staging') }}"
+
+    # ---------------------------------------------------------
+    # 🧩 Test ensure_flags_present() with duplicate protection
+    # ---------------------------------------------------------
+    - name: 🧩 Test ensure_flags_present filter
+      ansible.builtin.set_fact:
+        test_ensured: "{{ base_cmd | ensure_flags_present(['--force', '--debug']) }}"
+        test_ensured_duplicate: "{{ (base_cmd ~ ' --force') | ensure_flags_present(['--force']) }}"
+
+    # ---------------------------------------------------------
+    # 🧹 Test remove_flag()
+    # ---------------------------------------------------------
+    - name: 🧹 Test remove_flag filter
+      ansible.builtin.set_fact:
+        test_removed_force: "{{ (base_cmd ~ ' --force --debug') | remove_flag('--force') }}"
+        test_removed_both: "{{ (base_cmd ~ ' --force --debug') | remove_flag(['--force', '--debug']) }}"
+
+    # ---------------------------------------------------------
+    # 📊 Display test results
+    # ---------------------------------------------------------
+    - name: 📊 Print test results
+      ansible.builtin.debug:
+        msg:
+          - "has_flag('--force') → {{ test_has_force }}"
+          - "has_flag('--staging') → {{ test_has_staging }}"
+          - "add_flag_if_missing('--staging') → {{ test_added_staging }}"
+          - "ensure_flags_present(['--force','--debug']) → {{ test_ensured }}"
+          - "ensure_flags_present duplicate check → {{ test_ensured_duplicate }}"
+          - "remove_flag('--force') → {{ test_removed_force }}"
+          - "remove_flag(['--force','--debug']) → {{ test_removed_both }}"
+
+    # ---------------------------------------------------------
+    # ✅ Automated Validation
+    # ---------------------------------------------------------
+    - name: ✅ Evaluate pass/fail for all tests
+      ansible.builtin.set_fact:
+        filter_tests_passed: >-
+          {{
+            (test_has_force == expected_has_force)
+            and (test_has_staging == expected_has_staging)
+            and (test_added_staging == expected_added_staging)
+            and (test_removed_force == expected_removed_force)
+            and (test_removed_both == expected_removed_both)
+            and (test_ensured == expected_ensured_deduped)
+            and (test_ensured_duplicate == base_cmd ~ ' --force')
+          }}
+
+    # ---------------------------------------------------------
+    # 🧾 Final Summary
+    # ---------------------------------------------------------
+    - name: 🧾 Summary
+      ansible.builtin.debug:
+        msg: |
+          {% if filter_tests_passed %}
+          ✅ All filter tests PASSED (no duplicates, correct additions/removals)
+          {% else %}
+          ❌ Some tests FAILED
+            - has_flag('--force'): expected {{ expected_has_force }}, got {{ test_has_force }}
+            - has_flag('--staging'): expected {{ expected_has_staging }}, got {{ test_has_staging }}
+            - add_flag_if_missing('--staging'): expected "{{ expected_added_staging }}", got "{{ test_added_staging }}"
+            - ensure_flags_present(['--force','--debug']): expected "{{ expected_ensured_deduped }}", got "{{ test_ensured }}"
+            - ensure_flags_present duplicate check: expected "{{ base_cmd ~ ' --force' }}", got "{{ test_ensured_duplicate }}"
+            - remove_flag('--force'): expected "{{ expected_removed_force }}", got "{{ test_removed_force }}"
+            - remove_flag(['--force','--debug']): expected "{{ expected_removed_both }}", got "{{ test_removed_both }}"
+          {% endif %}
+

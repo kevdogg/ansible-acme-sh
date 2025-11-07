@@ -20,6 +20,12 @@
       skipped: "{{ acme_summary.skipped | default([]) }}"
       removed: "{{ acme_summary.removed | default([]) }}"
       failed: "{{ acme_summary.failed | default([]) }}"
+      warnings: "{{ acme_summary.warnings | default([]) }}"
+  tags: always
+
+- name: Resolve ACME paths and executables
+  ansible.builtin.include_tasks:
+    file: acme-resolve-acme-paths.yml
   tags: always
 
 - name: acme.sh Plan
@@ -29,32 +35,35 @@
 
 # Show preflight summary
 - name: Display preflight plan summary
-  ansible.builtin.include_tasks: plan-summary-compact.yml
+  ansible.builtin.include_tasks: acme-plan-summary-compact.yml
   tags: plan
 
 ########################
 # Issue/Renew Phase
 #######################
 
-### Install acme.sh if not installed and setup Directory Structure
-### Includes Force renew and acme.sh custom command
-- name: Install acme.sh
+# ============================================================================
+# Install acme.sh (Per-Host Setup)
+# ----------------------------------------------------------------------------
+# Includes:
+#   - Git clone and installation of acme.sh
+#   - Directory and environment setup
+#   - Systemd timer/service creation for auto-renewals
+#   - Optional notification configuration
+# ============================================================================
+- name: Install acme.sh if not installed
   ansible.builtin.include_tasks:
-    file: acme-letsencrypt-install-acme-sh.yml
-  loop: "{{ acme_sh_domains }}"
-  loop_control:
-    label: "{{ item.domains[0] }}"
+    file: acme-install-acme-sh.yml
   when:
-    - acme_sh_domains is defined
-    - acme_sh_domains | length > 0
-    - not item.remove | default(false)
-    - not acme_sh_uninstall|default(false)|bool
+    - not (acme_sh_uninstall | default(acme_sh_default_uninstall | default(false)) | bool)
   tags: install_acme.sh
 
+
 ### Issue/Renew and Deploy acme.sh certs
+### Includes Force renew and acme.sh custom command
 - name: Obtain and Install/Renew acme.sh certificates
   ansible.builtin.include_tasks:
-    file:  acme_domain_workflow.yml
+    file:  acme_domain-workflow.yml
   loop: "{{ acme_sh_domains }}"
   loop_control:
     label: "{{ item.domains[0] }}"
@@ -62,35 +71,15 @@
     - acme_sh_domains is defined and acme_sh_doamin | length > 0
     - item.domains is defined and item.domains | length > 0
     - not item.remove | default(false) | bool
-    - not acme_sh_uninstall|default(false)|bool
- 
+    - not (acme_sh_uninstall | default(acme_sh_default_uninstall | default(false)) | bool)
 
-### Install systemd acme_letsencrypt service and timer templates - (Per Host Task)
-- name: Install acme_letsencrypt service and timer templates to /etc/systemd/system
-  ansible.builtin.include_tasks:
-    file: systemd-install-templates.yml
-    when:
-      - not acme_sh_uninstall | default(false) | bool
-    tags:
-      - systemd_install
+############################
+# Remove Certificate Phase
+############################
 
-
-### Start systemd acme.sh timer for certificate renewals - (Per Host Task)
-- name: Start acme.sh certificate(s) systemd timers
-  ansible.builtin.include_tasks:
-    file: systemd-start-renewals.yml
-  when:
-    - not acme_sh_uninstall | default(false) | bool
-  tags:
-    - systemd_start
-
-########################
-# Remove Phase
-#######################
-
-### Remove/Inactivate Certificates
+### Remove/Inactivate Certificates (Per Domain Task)
 - name: Process ACME domain removals
-  ansible.builtin.include_tasks: acme_domain_remove.yml
+  ansible.builtin.include_tasks: acme-domain-remove.yml
   loop: "{{ acme_sh_domains }}"
   loop_control:
     label: "{{ item.domains[0] }}"
@@ -98,60 +87,8 @@
     - acme_sh_domains is defined and acme_sh_domains | length > 0
     - item.domains is defined and item.domains | length > 0
     - item.remove | default(false) | bool
-    - not acme_sh_uninstall | default(false) | bool
+    - not (acme_sh_uninstall | default(acme_sh_default_uninstall | default(false)) | bool)
 
-
-
-#- name: Remove Individual Domain(s) Block
-#  block:
-#  
-#  - name: acme.sh --remove -d <domain_name>
-#    ansible.builtin.include_tasks:
-#      file: acme-stop-tracking-certificates.yml
-#      apply:
-#        tags: acme_remove_domain
-#    loop: "{{ acme_sh_domains }}"
-#    when:
-#      - acme_sh_domains is defined and acme_sh_domains | length > 0
-#      - item.domains is defined and item.domains | length > 0
-#      - item.remove is defined and item.remove | length > 0
-#    tags:
-#      - acme_remove_domain
-#
-#  - name: Remove acme.sh internal certificate files and directories (ecc and non-ecc directories if they exist) for domain removal --
-#    ansible.builtin.include_tasks:
-#      file: remove-acme-certificate-files-and-directory.yml
-#      apply:
-#        tags: remove_selected_certificates
-#    when:
-#      - acme_sh_domains is defined and acme_sh_domains | length > 0
-#      - item.domains is defined and item.domains | length > 0
-#      - item.remove is defined and item.remove | length > 0
-#      - not acme_sh_uninstall or acme_sh_uninstall|bool == false
-#    loop: "{{ acme_sh_domains }}"
-#    tags: remove_selected_certificates
-#
-#  - name: Remove acme.sh installed certificate files
-#    ansible.builtin.include_tasks:
-#      file: remove-acme-certificate-installed-files-and-directory.yml
-#      apply:
-#        tags: remove_selected_certificates
-#    loop: "{{ acme_sh_domains }}"
-#    when:
-#      - acme_sh_domains and item.domains is defined and item.domains
-#      - item.remove is defined and item.remove
-#      - not acme_sh_uninstall or acme_sh_uninstall|bool == false
-#    tags: remove_selected_certificates
-#  ### Remove acme.sh certificates that are flagged for removal that are tracked by acme.sh
-#  - name: Stop certificate tracking
-#    ansible.builtin.include_tasks:
-#      file: systemd-stop-renewals.yml
-#      apply:
-#        tags: systemd_stop
-#    when:
-#      - not acme_sh_uninstall or acme_sh_uninstall|bool == false
-#    tags:
-#      - cron_remove_domain
 
   ### Remove acme.sh certificates for domain(s) that have been marked for removal
   ### This will remove certificates and directories within /root/.acme.sh/<domain directory> (_ecc and non _ecc) and
@@ -169,21 +106,19 @@
 #  when:
 #    - not acme_sh_uninstall or acme_sh_uninstall|bool == false
 
-- name: Uninstall everything block
-  block:
+############################
+# Remove All Phase
+############################
+## Uninstall everything -- Uninstall acme.sh and all issued certificates and remove all timers/service files
+- name: 🧹 Full ACME teardown (remove all certs, services, and acme.sh)
+  ansible.builtin.include_tasks:
+    file: acme-remove-all.yml
+  when:
+    - acme_sh_uninstall | default(acme_sh_default_uninstall | default(false)) | bool
+  tags: [remove_all, teardown]
 
-  ## Uninstall everything -- Uninstall acme.sh and all issued/installed certificates and remove all timers/service files
-  - name: Uninstall acme and remove every certificate and service/timer files
-    ansible.builtin.include_tasks:
-      file: acme-remove-all.yml
-      apply:
-        tags:
-          - remove_all
-    when:
-      - acme_sh_uninstall is defined
-      - acme_sh_uninstall|bool == true
-    tags: remove_all
+- name: Include final summary
+  ansible.builtin.include_tasks: acme-summary-compact.yml
+  when: acme_summary is defined
+  tags: summary
 
-- name: Display ACME final summary
-  ansible.builtin.include_tasks: acme-summary.yml
-  tags: [summary]

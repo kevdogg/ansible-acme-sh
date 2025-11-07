@@ -1,23 +1,90 @@
 ---
+# ============================================================================
+# defaults/main.yml
+# ----------------------------------------------------------------------------
+# Purpose:
+#   Provides all default configuration variables for the ACME / Let's Encrypt
+#   automation role. Defines baseline values for:
+#     • acme.sh installation and execution behavior
+#     • default paths, permissions, and directories
+#     • DNS provider settings and API credentials
+#     • systemd service/timer file locations
+#     • notification hooks and environment variables
+#
+# Notes:
+#   - All defaults can be safely overridden in host_vars or group_vars.
+#   - Designed for modular use across multiple ACME domain workflows.
+#   - Defaults are structured hierarchically using “default_*” naming,
+#     with runtime-resolved equivalents for clarity and extensibility.
+#
+# Maintainer: KevDog
+# Version: 2025.11.07 / compatible with acme.sh ≥ 3.0.8
+# Tags: [acme, letsencrypt, defaults, ansible, automation]
+# ============================================================================
 
+# ============================================================================
 # Systemd related
-systemd_files_location: "/etc/systemd/system"
-systemd_timer_name: "acme_letsencrypt.timer"
-systemd_service_name: "acme_letsencrypt.service"
+# ============================================================================
 
-# Acme.sh Related
+# Default installation directories
+acme_sh_default_systemd_service_location: "/etc/systemd/system"
+acme_sh_default_systemd_timer_location: "/etc/systemd/system"
 
-acme_sh_become_user: "{{ ansible_become_user }}"
-acme_sh_default_directory: "/root/.acme.sh"
-acme_sh_default_executable: "{{ acme_sh_default_directory }}/acme.sh"
-acme_sh_bin: >-
+# Default unit names
+acme_sh_default_systemd_service_name: "acme_letsencrypt.service"
+acme_sh_default_systemd_timer_name: "acme_letsencrypt.timer"
+
+# Default full paths (used when no override provided)
+acme_sh_default_systemd_service_path: >-
+  {{
+    acme_sh_default_systemd_service_location ~ '/' ~
+    acme_sh_default_systemd_service_name
+  }}
+
+acme_sh_default_systemd_timer_path: >-
+  {{
+    acme_sh_default_systemd_timer_location ~ '/' ~
+    acme_sh_default_systemd_timer_name
+  }}
+
+# Resolved user-overridable versions
+acme_sh_systemd_service_path: >-
   {{
     (
-      acme_sh_directory
-      | default(acme_sh_default_directory, true)
+      acme_sh_systemd_service_location
+      | default(acme_sh_default_systemd_service_location, true)
     )
-    | expanduser
-  }}/acme.sh
+    ~ '/' ~
+    (
+      acme_sh_systemd_service_name
+      | default(acme_sh_default_systemd_service_name, true)
+    )
+  }}
+
+acme_sh_systemd_timer_path: >-
+  {{
+    (
+      acme_sh_systemd_timer_location
+      | default(acme_sh_default_systemd_timer_location, true)
+    )
+    ~ '/' ~
+    (
+      acme_sh_systemd_timer_name
+      | default(acme_sh_default_systemd_timer_name, true)
+    )
+  }}
+
+# ============================================================================
+# acme.sh Related
+# ============================================================================
+
+acme_sh_become_user: "{{ ansible_become_user }}"
+acme_sh_default_directory: "~/.acme.sh"
+acme_sh_default_executable: "{{ acme_sh_default_directory }}/acme.sh"
+acme_sh_default_executable_path: "/bin/bash"
+acme_sh_default_bin: "{{ acme_sh_default_executable }}"
+# Default Bash executable path (used in all shell tasks)
+bash_executable_path: "{{ acme_sh_default_executable_path | default('/bin/bash') }}"
 
 acme_sh_default_install_directory_permissions: "0755"
 
@@ -25,11 +92,10 @@ acme_sh_dependencies: ["cron", "git", "wget", "curl", "openssl"]
 
 acme_sh_default_git_version: "master"
 acme_sh_default_git_url: "https://github.com/acmesh-official/acme.sh.git"
-# acme_sh_git_clone_dest: "/usr/local/src/acme.sh"
 acme_sh_default_git_clone_dest: "/root/git/acme.sh"
 acme_sh_default_git_clone_force: false
 
-acme_sh_upgrade: true
+acme_sh_default_upgrade: true
 acme_sh_uninstall: false
 
 acme_sh_default_account_email: "{{ vault_acme_sh_account_email }}"
@@ -40,7 +106,6 @@ acme_sh_default_copy_certs_to_path: "/etc/ssl/letsencrypt"
 acme_sh_default_pkcs12_password: "pass"
 
 acme_sh_list_domains: true
-
 acme_sh_default_staging: true
 
 acme_sh_default_force_issue: false
@@ -57,18 +122,15 @@ acme_sh_default_dns_provider_api_keys:
   "CF_Email": "{{ vault_cf_email }}"
 acme_sh_default_dns_sleep: 30
 
-
-# base default used everywhere unless overridden
+# Base default used everywhere unless overridden
 acme_sh_default_extra_flags: "--ecc"
 
-# more specific defaults built from the base
+# More specific defaults built from the base
 acme_sh_default_extra_flags_issue: "{{ '--keylength ec-384 ' ~ acme_sh_default_extra_flags }}"
 acme_sh_default_extra_flags_renew: "{{ acme_sh_default_extra_flags }}"
 acme_sh_default_extra_flags_remove: "{{ acme_sh_default_extra_flags }}"
 acme_sh_default_extra_flags_install_cert: "{{ acme_sh_default_extra_flags }}"
 
-# acme_sh_default_install_cert_reloadcmd: "sudo service nginx reload"
-#acme_sh_default_install_pkcs12_template_path: "/usr/local/bin/pkcs12.sh"
 acme_sh_default_install_cert_reloadcmd: ""
 
 acme_sh_default_issue_pre_hook: ""
@@ -82,8 +144,16 @@ acme_sh_default_domain_alias: ""
 
 acme_sh_default_server: "letsencrypt"
 
+# ============================================================================
+# Notifications
+# ============================================================================
 
 acme_sh_enable_notify: true
+
+# Safe defaults (ensures playbooks still run without vault-defined values)
+acme_sh_default_notify_hooks: []
+acme_sh_default_notify_env_var: {}
+
 acme_sh_notify_hooks: ["mailgun"]
 acme_sh_notify_env_var:
   "MAILGUN_API_KEY": "{{ vault_mailgun_api_key }}"
@@ -91,19 +161,15 @@ acme_sh_notify_env_var:
   "MAILGUN_FROM": "{{ 'acme-' + ansible_fqdn + '@' + vault_mailgun_api_domain }}"
   "MAILGUN_TO": "{{ vault_mailgun_to }}"
 
-#--notify-level <0|1|2|3>: Sets the level of notification detail.
-#  0: Disabled, no notifications.
-#  1: Notifications only on errors.
-#  2: Notifications on successful renewals or errors (default).
-#  3: Notifications on skipped, renewed, or error events.
+# --notify-level <0|1|2|3> Default 2
+#    0: disabled, no notification will be sent.
+#    1: send notification only when there is an error.
+#    2: send notification on successful renewal or error.
+#    3: send notification for every skipped, renewed, or failed cert.
+acme_sh_notify_level: 2
 
-acme_sh_notify_level: 3
+# --notify-mode <0|1> Default 0
+#    0: Bulk mode — one message for all domains.
+#    1: Cert mode — separate message for each cert.
 acme_sh_notify_mode: 0
-
-# Domain Dynamic section - These variables most likely to be placed in host variables section
-#acme_sh_domains:
-#  - domains: ["test.gohilton.com", "test1.gohilton.com"]
-#    staging: True
-#  - domains: ["test2.gohilton.com"]
-#    staging: True
 

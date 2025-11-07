@@ -1,99 +1,274 @@
 ---
+# ============================================================================
+# acme-remove-all.yml
+# ----------------------------------------------------------------------------
+# Purpose:
+#   Complete teardown of acme.sh and all associated certificates.
+#   Removes local acme.sh-managed certificates (RSA/ECC), systemd units,
+#   cloned git sources, and the ~/.acme.sh directory itself.
+#
+# Features:
+#   • Stops and removes acme.sh systemd service and timer units
+#   • Removes all certificates managed by acme.sh (--remove)
+#   • Cleans up ~/.acme.sh and local git sources
+#   • Updates the global acme_summary scoreboard
+#   • Optional confirmation check after uninstall
+#
+# Notes:
+#   - Deployed certs under /etc/ssl/letsencrypt are not touched.
+#   - Safe to re-run even after cleanup; idempotent.
+#
+# Maintainer: KevDog
+# Version: 2025.11.07 / compatible with acme.sh ≥ 3.0.8
+# Tags: [acme, letsencrypt, removal, cleanup, rsa, ecc, systemd]
+# ============================================================================
 
-## Notes
-# Stop Timers
-# Remove all domains tracked by acme.sh
-# Remove systemd acme.sh Timer and Service Templates
-# Remove Installed Certificates Directory
-# Uninstall Acme Remove Acme Directory
-# Remove Acme git Sources
 
-# Stop acme_letsencrypt timer
-- name: Stop acme_letsencrypt.timers
-  ansible.builtin.include_tasks:
-    file: systemd-stop-timer.yml
-    apply:
-      tags: systemd_stop_timer
+###########
+# Systemd #
+###########
+- name: Determine if systemd timer file exists
+  ansible.builtin.stat:
+    path: "{{ acme_sh_systemd_timer_path | default(acme_sh_default_systemd_timer_path) }}"
+  register: systemd_timer_file_exists_result
+  become: true
+  become_user: "{{ acme_sh_become_user }}"
+
+- name: Stop timer if it exists
+  ansible.builtin.systemd_service:
+    name: "{{ acme_sh_systemd_timer_name | default(acme_sh_default_systemd_timer_name) }}"
+    enabled: false
+    state: "stopped"
+    daemon_reload: true
   when:
-    - acme_sh_uninstall
-    - acme_sh_uninstall|bool == true
-  tags:
-    - systemd_stop_timer
+    - systemd_timer_file_exists_result.stat.exists
+  become: true
+  become_user: "{{ acme_sh_become_user }}"
 
-# Remove all domains tracked by acme.sh
-- name: Remove all domains tracked by acme.sh
-  ansible.builtin.include_tasks:
-    file: acme-stop-tracking-certificates.yml
-  loop: "{{ acme_sh_domains }}"
-  when:
-    - acme_sh_domains and item.domains is defined and item.domains
-    - acme_sh_uninstall
-    - acme_sh_uninstall|bool == true
-  tags:
-    - cron_remove_domain
+- name: Determine if systemd service file exists
+  ansible.builtin.stat:
+    path: "{{ acme_sh_systemd_service_path | default(acme_sh_default_systemd_service_path) }}"
+  register: systemd_service_file_exists_result
+  become: true
+  become_user: "{{ acme_sh_become_user }}"
 
-# Remove systemd acme.sh Timer and Service Templates
-- name: Remove systemd Timer and Service Files
-  ansible.builtin.include_tasks:
-    file: systemd-remove-templates.yml
-  when:
-    - acme_sh_uninstall
-    - acme_sh_uninstall|bool == true
-  tags:
-    - remove_templates
-
-# Remove Installed Certificates Directory
-- name: Remove Installed Certificate Directory if it Exists
+- name: Remove {{ acme_sh_systemd_timer_path }} if it exists
   ansible.builtin.file:
-    path: "{{ acme_sh_copy_certs_to_path }}/{{ item.domains | first }}"
+    path: "{{ acme_sh_systemd_timer_path | default(acme_sh_default_systemd_timer_path) }}"
     state: "absent"
   when:
-    - acme_sh_uninstall
-    - acme_sh_uninstall|bool == true
-  loop: "{{ acme_sh_domains }}"
+    - systemd_timer_file_exists_result.stat.exists
+  become: true
   become_user: "{{ acme_sh_become_user }}"
 
-# Uninstall acme.sh and remove Acme Directory
-- name: Determine if acme.sh is installed
-  ansible.builtin.stat:
-    path: "{{ acme_sh_default_executable }}"
-  register: is_acme_sh_installed
+- name: Remove {{ acme_sh_systemd_service_path }} if it exists
+  ansible.builtin.file:
+    path: "{{ acme_sh_systemd_service_path | default(acme_sh_default_systemd_service_path) }}"
+    state: "absent"
   when:
-    - acme_sh_uninstall is defined and acme_sh_uninstall|bool == true
+    - systemd_service_file_exists_result.stat.exists
+  become: true
   become_user: "{{ acme_sh_become_user }}"
+
+
+#######################
+# Certificate Related #
+#######################
+
+- name: Retrieve current certificate list from acme.sh
+  ansible.builtin.command: "{{ acme_sh_bin }} --list"
+  register: acme_list_output
+  changed_when: false
+  failed_when: false
+  become: true
+  become_user: "{{ acme_sh_become_user }}"
+
+- name: Parse acme.sh certificate list into domain:type map
+  ansible.builtin.set_fact:
+    acme_cert_dict: >-
+      {{
+        acme_cert_dict | default({}) | combine({
+          (_domain): (_type)
+        })
+      }}
+  vars:
+    _domain: >-
+      {{
+        (item | regex_search('^\\s*([^|\\s]+)\\s*\\|', '\\1')) | default('')
+      }}
+    _type: >-
+      {{
+        (
+          'ecc'
+          if (item | regex_search('\\|\\s*ec[-_]?\\d+', ignorecase=True))
+          else 'rsa'
+        )
+      }}
+  loop: "{{ acme_list_output.stdout_lines }}"
+  when:
+    - item is search('\\|')
+    - not item is search('Main_Domain', ignorecase=True)
+    - _domain | length > 0
+
+- name: Warn if no certificates detected
+  ansible.builtin.debug:
+    msg: "⚠️  No valid certificates found in acme.sh --list output."
+  when: acme_cert_dict | length == 0
+  tags: warn
+
+- name: Remove all certificates managed by acme.sh
+  ansible.builtin.shell: >-
+    {{
+      acme_sh_bin ~ ' --remove -d ' ~ item.key ~
+      ( ' --ecc' if item.value == 'ecc' else '' )
+    }}
+  args:
+    chdir: "{{ acme_sh_directory_resolved }}"
+    executable: "{{ bash_executable_path }}"
+  loop: "{{ acme_cert_dict | dict2items }}"
+  register: acme_remove_results
+  failed_when: false
+  changed_when: "'no need to remove' not in (acme_remove_results.stdout | default(''))"
+  become: true
+  become_user: "{{ acme_sh_become_user }}"
+  when: acme_cert_dict | length > 0
+
+- name: Remove internal certificate directories (RSA/ECC)
+  ansible.builtin.file:
+    path: "{{ acme_sh_directory_resolved }}/{{ item.key }}{{ '_ecc' if item.value == 'ecc' else '' }}"
+    state: absent
+  loop: "{{ acme_cert_dict | dict2items }}"
+  become: true
+  become_user: "{{ acme_sh_become_user }}"
+  when: acme_cert_dict | length > 0
+
+
+########################
+# Summary & Debug Info #
+########################
+- name: Summarize removal results
+  vars:
+    removed_items: >-
+      {{
+        acme_remove_results.results
+        | selectattr('rc', 'equalto', 0)
+        | map(attribute='item.key')
+        | list
+      }}
+    failed_items: >-
+      {{
+        acme_remove_results.results
+        | rejectattr('rc', 'equalto', 0)
+        | map(attribute='item.key')
+        | list
+      }}
+  ansible.builtin.set_fact:
+    acme_summary: >-
+      {{
+        acme_summary
+        | combine({
+            'removed': (acme_summary.removed + removed_items | map('community.general.dict_kv', 'domain', 'status', 'removed') | list)
+                        if removed_items | length > 0 else acme_summary.removed,
+            'failed':  (acme_summary.failed + failed_items | map('community.general.dict_kv', 'domain', 'status', 'failed') | list)
+                        if failed_items | length > 0 else acme_summary.failed
+          }, recursive=True)
+      }}
+  when: acme_remove_results is defined
+  tags: summary
+
+- name: Show per-domain removal outcome
+  ansible.builtin.debug:
+    msg: >-
+      {{
+        (
+          '🗑️  Removed ' ~ item.item.key ~ ' (' ~ item.item.value ~ ')'
+          if item.rc == 0
+          else '❌ Failed to remove ' ~ item.item.key ~ ' (' ~ item.item.value ~ ')'
+        )
+      }}
+  loop: "{{ acme_remove_results.results | default([]) }}"
+  when: acme_remove_results is defined
+  tags: debug
+
+- name: Snapshot current scoreboard (verbose mode only)
+  ansible.builtin.include_tasks: debug-acme-scoreboard.yml
+  when: ansible_verbosity | int >= 2
+  tags: debug
+
+
+#####################################
+# Remove acme.sh and git repository #
+#####################################
 
 - name: Uninstall acme.sh and disable all certificate renewals
-  ansible.builtin.command: ./acme.sh --uninstall
+  vars:
+    acme_exe: "{{ acme_sh_bin | default(acme_sh_default_bin, true) }}"
+  ansible.builtin.shell: >-
+    {{
+      acme_exe ~ ' --uninstall'
+    }}
   args:
-    chdir: "{{ acme_sh_default_directory }}"
-  when:
-    - acme_sh_uninstall is defined and acme_sh_uninstall|bool == true
-    - is_acme_sh_installed.stat.exists == true
+    chdir: "{{ acme_sh_directory_resolved }}"
+    executable: "{{ bash_executable_path }}"
+  register: acme_exe_remove_result
+  failed_when: acme_exe_remove_result.rc != 0
+  changed_when: acme_exe_remove_result.rc == 0
+  become: true
   become_user: "{{ acme_sh_become_user }}"
 
 - name: Remove acme directory
   ansible.builtin.file:
     path: "{{ acme_sh_default_directory }}"
     state: absent
-  when:
-    - is_acme_sh_installed.stat.exists|bool == true
-    - acme_sh_uninstall is defined and acme_sh_uninstall|bool == true
+  become: true
   become_user: "{{ acme_sh_become_user }}"
 
-# Remove Acme git Sources
 - name: Determine if acme.sh git repository path exists
   ansible.builtin.stat:
-    path: "{{ acme_sh_git_clone_dest }}"
-  register: is_acme_sh_cloned_locally
-  when:
-    - acme_sh_uninstall is defined and acme_sh_uninstall|bool == true
+    path: "{{ acme_sh_git_clone_dest | default(acme_sh_default_git_clone_dest) }}"
+  register: is_acme_sh_cloned_locally_result
+  become: true
   become_user: "{{ acme_sh_become_user }}"
 
 - name: Remove acme.sh git repository if repository exists
   ansible.builtin.file:
-    path: "{{ acme_sh_git_clone_dest }}"
+    path: "{{ acme_sh_git_clone_dest | default(acme_sh_default_git_clone_dest) }}"
     state: absent
   when:
-    - is_acme_sh_cloned_locally.stat.exists|bool == true
-    - acme_sh_uninstall is defined and acme_sh_uninstall|bool == true
+    - is_acme_sh_cloned_locally_result.stat.exists | bool
+  become: true
   become_user: "{{ acme_sh_become_user }}"
+
+
+#########################
+# Optional Final Checks #
+#########################
+
+- name: Record acme.sh uninstallation in summary
+  ansible.builtin.set_fact:
+    acme_summary: >-
+      {{
+        acme_summary
+        | combine({
+            'uninstalled': (acme_summary.uninstalled | default([])) + ['acme.sh removed']
+          }, recursive=True)
+      }}
+  tags: summary
+
+- name: Confirm acme.sh binary removed
+  ansible.builtin.stat:
+    path: "{{ acme_sh_bin }}"
+  register: acme_bin_check
+  become: true
+  become_user: "{{ acme_sh_become_user }}"
+
+- name: Debug confirmation result
+  ansible.builtin.debug:
+    msg: >-
+      {{
+        '✅ acme.sh successfully removed.'
+        if not acme_bin_check.stat.exists
+        else '⚠️ acme.sh binary still present at ' ~ acme_sh_bin
+      }}
+  tags: debug
+
