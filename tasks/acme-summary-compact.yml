@@ -88,6 +88,11 @@
         - {{ w.domain }} → {{ w.message }}
       {% endfor %}
       {% endif %}
+
+      {% if acme_summary.filter_tests is defined %}
+      🧪 **Filter Plugin Tests**
+        → Result: {{ '✅ PASSED' if acme_summary.filter_tests.status == 'passed' else '❌ FAILED' }}
+      {% endif %}
   tags: summary
 
 
