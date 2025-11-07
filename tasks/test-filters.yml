@@ -98,20 +98,20 @@
             - remove_flag(['--force','--debug']): expected "{{ expected_removed_both }}", got "{{ test_removed_both }}"
           {% endif %}
 
-# ---------------------------------------------------------
-# 🪣 Export filter test status for global summary
-# ---------------------------------------------------------
-- name: Record filter test outcome in global summary
-  ansible.builtin.set_fact:
-    acme_summary: >-
-      {{
-        acme_summary
-        | combine({
-            'filter_tests': {
-              'status': 'passed' if filter_tests_passed else 'failed'
-            }
-          }, recursive=True)
-      }}
-  when: filter_tests_passed is defined
-  tags: summary
+    # ---------------------------------------------------------
+    # 🪣 Export filter test status for global summary
+    # ---------------------------------------------------------
+    - name: Record filter test outcome in global summary
+      ansible.builtin.set_fact:
+        acme_summary: >-
+          {{
+            acme_summary
+            | combine({
+                'filter_tests': {
+                  'status': 'passed' if filter_tests_passed else 'failed'
+                }
+              }, recursive=True)
+          }}
+      when: filter_tests_passed is defined
+      tags: summary
 
