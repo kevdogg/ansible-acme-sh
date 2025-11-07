@@ -15,6 +15,18 @@
     expected_removed_both: "acme.sh --issue -d example.com --ecc"
     expected_ensured_deduped: "acme.sh --issue -d example.com --ecc --force --debug"
 
+  pre_tasks:
+    - name: Initialize acme_summary for test context
+      ansible.builtin.set_fact:
+        acme_summary:
+          installed: []
+          renewed: []
+          skipped: []
+          removed: []
+          failed: []
+          warnings: []
+
+
   tasks:
 
     # ---------------------------------------------------------

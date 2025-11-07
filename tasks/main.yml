@@ -89,23 +89,6 @@
     - item.remove | default(false) | bool
     - not (acme_sh_uninstall | default(acme_sh_default_uninstall | default(false)) | bool)
 
-
-  ### Remove acme.sh certificates for domain(s) that have been marked for removal
-  ### This will remove certificates and directories within /root/.acme.sh/<domain directory> (_ecc and non _ecc) and
-  ### /etc/ssl/letsencrypt/<domain directory>
-#  - name: Remove acme.sh certficates and directorieswith  for domain(s) that have been marked for removal
-#    ansible.builtin.include_tasks:
-#      file: acme-remove-selected-domain-certificates.yml
-#      apply:
-#        tags: remove_selected_certificates
-#    when:
-#      - not acme_sh_uninstall or acme_sh_uninstall|bool == false
-#    tags:
-#      - remove_selected_certificates
-#  
-#  when:
-#    - not acme_sh_uninstall or acme_sh_uninstall|bool == false
-
 ############################
 # Remove All Phase
 ############################
@@ -117,8 +100,40 @@
     - acme_sh_uninstall | default(acme_sh_default_uninstall | default(false)) | bool
   tags: [remove_all, teardown]
 
+# ==========================================================
+# 🧩 Developer / Diagnostic Section
+# ----------------------------------------------------------
+# Validates custom filter plugins such as:
+#   - has_flag
+#   - add_flag_if_missing
+#   - ensure_flags_present
+#   - remove_flag
+#
+# Supports both:
+#   • Standalone mode  →  ansible-playbook tasks/test-filters.yml
+#   • Integrated mode  →  ansible-playbook main.yml --tags test-filters -vvv
+# ==========================================================
+
+- name: Run filter plugin test suite (developer debug only)
+  ansible.builtin.include_tasks:
+    file: test-filters.yml
+  when:
+    - ansible_verbosity | int >= 3
+    - "'test-filters' in ansible_run_tags"
+  tags: [debug, test-filters]
+
+# ==========================================================
+# 📋 Final Compact Summary
+# ----------------------------------------------------------
+# Always runs at end-of-role unless disabled.
+# Shows installed / renewed / removed / failed domains,
+# with optional plan delta comparison.
+# ==========================================================
+
 - name: Include final summary
   ansible.builtin.include_tasks: acme-summary-compact.yml
-  when: acme_summary is defined
+  when:
+    - acme_summary is defined
   tags: summary
+
 
