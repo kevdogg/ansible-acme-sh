@@ -445,7 +445,7 @@ You can control execution using Ansible tags:
 
 ### Example Runs
 
-```bash
+
 # 1️⃣ Full role execution (typical run)
 ansible-playbook playbook.yml
 
