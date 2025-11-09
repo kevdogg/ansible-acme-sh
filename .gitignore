@@ -6,3 +6,7 @@
 .idea/
 .vscode/
 *.retry
+README.md.bak
+compare-task-files.sh
+tasks/acme-copy-pkcs12-file-from-install-to-base.yml
+templates/pcks12.sh.j2
