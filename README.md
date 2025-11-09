@@ -44,20 +44,24 @@ It automates the complete lifecycle of certificate management — **plan, issue,
 ### From GitHub
 ```bash
 ansible-galaxy install git+https://github.com/kevdogg/ansible-acme-sh.git
-From Local Development (recommended)
-In your ansible.cfg:
+```
 
-ini
-Copy code
+### From Local Development (recommended)
+In your `ansible.cfg`:
+```ini
 roles_path = ~/git/roles:/etc/ansible/roles
-Clone locally:
+```
 
-bash
-Copy code
+Clone locally:
+```bash
 git clone https://github.com/kevdogg/ansible-acme-sh.git ~/git/roles/kevdogg.acme_sh
-🧭 Example Playbook
-yaml
-Copy code
+```
+
+---
+
+## 🧭 Example Playbook
+
+```yaml
 ---
 - name: Configure and manage certificates
   hosts: all
@@ -66,10 +70,10 @@ Copy code
   roles:
     - role: kevdogg.acme_sh
       tags: ["acme"]
-Example host_vars/example.com.yml:
+```
 
-yaml
-Copy code
+Example `host_vars/example.com.yml`:
+```yaml
 acme_sh_domains:
   - domains: ["example.com", "www.example.com"]
     staging: true
@@ -78,23 +82,31 @@ acme_sh_domains:
 
   - domains: ["api.example.com"]
     remove: true
-🧩 Key Variables (Summary)
-Variable	Default	Description
-acme_sh_become_user	{{ ansible_become_user }}	System user that runs acme.sh
-acme_sh_default_git_url	https://github.com/acmesh-official/acme.sh.git	acme.sh repository
-acme_sh_default_copy_certs_to_path	/etc/ssl/letsencrypt	Target cert storage directory
-acme_sh_enable_notify	true	Enable acme.sh notifications
-acme_sh_default_dns_provider	dns_cf	DNS API provider (Cloudflare default)
-acme_sh_default_dns_provider_api_keys	{ CF_Token, CF_Zone_ID, CF_Email }	API credentials
-acme_sh_default_server	letsencrypt	Default CA authority
-acme_sh_uninstall	false	Remove everything (systemd, certs, repo)
-acme_sh_default_extra_flags	--ecc	Default cert type (ECC)
+```
 
-🗂️ See defaults/main.yml for all configuration options.
+---
 
-🔄 Role Execution Flow (ASCII Diagram)
-pgsql
-Copy code
+## 🧩 Key Variables (Summary)
+
+| Variable | Default | Description |
+|-----------|----------|-------------|
+| `acme_sh_become_user` | `{{ ansible_become_user }}` | System user that runs acme.sh |
+| `acme_sh_default_git_url` | `https://github.com/acmesh-official/acme.sh.git` | acme.sh repository |
+| `acme_sh_default_copy_certs_to_path` | `/etc/ssl/letsencrypt` | Target cert storage directory |
+| `acme_sh_enable_notify` | `true` | Enable acme.sh notifications |
+| `acme_sh_default_dns_provider` | `dns_cf` | DNS API provider (Cloudflare default) |
+| `acme_sh_default_dns_provider_api_keys` | `{ CF_Token, CF_Zone_ID, CF_Email }` | API credentials |
+| `acme_sh_default_server` | `letsencrypt` | Default CA authority |
+| `acme_sh_uninstall` | `false` | Remove everything (systemd, certs, repo) |
+| `acme_sh_default_extra_flags` | `--ecc` | Default cert type (ECC) |
+
+🗂️ See [`defaults/main.yml`](defaults/main.yml) for all configuration options.
+
+---
+
+## 🔄 Role Execution Flow (ASCII Diagram)
+
+```
 ┌───────────────────────────────────────────────────────────────┐
 │                        Preflight Phase                        │
 │---------------------------------------------------------------│
@@ -141,9 +153,13 @@ Copy code
 │  test-filters.yml → Validate CLI flag filter plugins           │
 │  (Run manually with `--tags test-filters`)                    │
 └───────────────────────────────────────────────────────────────┘
-🧭 Role Execution Flow (Mermaid Diagram)
-mermaid
-Copy code
+```
+
+---
+
+## 🧭 Role Execution Flow (Mermaid Diagram)
+
+```mermaid
 flowchart TD
   A[🧩 Preflight Phase<br/>acme-plan.yml / summary] --> B[⚙️ Installation Phase<br/>acme-install-acme-sh.yml]
   B --> C[🔁 Workflow Phase<br/>acme-domain-workflow.yml]
@@ -159,32 +175,39 @@ flowchart TD
   style E fill:#F3E5F5,stroke:#8E24AA,stroke-width:2px
   style F fill:#F1F8E9,stroke:#7CB342,stroke-width:2px
   style G fill:#ECEFF1,stroke:#546E7A,stroke-width:2px
-🏷️ Tag Reference
-Tag	Executes	Description
-plan	acme-plan.yml, acme-plan-summary-compact.yml	Preflight plan + display
-install_acme.sh	acme-install-acme-sh.yml	Install and setup acme.sh
-workflow	acme-domain-workflow.yml	Issue, renew, and deploy certs
-remove_all	acme-remove-all.yml	Full teardown of certs and systemd
-summary	acme-summary-compact.yml	Final report and delta analysis
-debug	test-filters.yml, debug-acme-scoreboard.yml	Developer tests and extra logging
-notify	Internal in acme-install-acme-sh.yml	Configure notifications
-teardown	Alias for remove_all	Complete uninstall and cleanup
+```
 
-🧪 Developer Tools
+---
+
+## 🏷️ Tag Reference
+
+| Tag | Executes | Description |
+|------|-----------|-------------|
+| `plan` | `acme-plan.yml`, `acme-plan-summary-compact.yml` | Preflight plan + display |
+| `install_acme.sh` | `acme-install-acme-sh.yml` | Install and setup acme.sh |
+| `workflow` | `acme-domain-workflow.yml` | Issue, renew, and deploy certs |
+| `remove_all` | `acme-remove-all.yml` | Full teardown of certs and systemd |
+| `summary` | `acme-summary-compact.yml` | Final report and delta analysis |
+| `debug` | `test-filters.yml`, `debug-acme-scoreboard.yml` | Developer tests and extra logging |
+| `notify` | Internal in `acme-install-acme-sh.yml` | Configure notifications |
+| `teardown` | Alias for `remove_all` | Complete uninstall and cleanup |
+
+---
+
+## 🧪 Developer Tools
+
 Run internal filter verification directly:
-
-bash
-Copy code
+```bash
 ansible-playbook roles/kevdogg.acme_sh/tasks/test-filters.yml -vvv
+```
+
 Or from a playbook:
-
-bash
-Copy code
+```bash
 ansible-playbook playbook.yml --tags test-filters -vvv
-Common debug options:
+```
 
-bash
-Copy code
+Common debug options:
+```bash
 # Full execution
 ansible-playbook playbook.yml
 
@@ -193,19 +216,32 @@ ansible-playbook playbook.yml --skip-tags debug
 
 # Only plan and summary
 ansible-playbook playbook.yml --tags plan,summary
-🧰 Example Developer Setup
-bash
-Copy code
+```
+
+---
+
+## 🧰 Example Developer Setup
+
+```bash
 git clone https://github.com/kevdogg/ansible-acme-sh.git ~/git/roles/kevdogg.acme_sh
 cd ~/ansible/letsencrypt
 ansible-playbook playbook.yml --limit ns3.gohilton.com
-🧾 License
-Licensed under the MIT License — see LICENSE.
+```
 
-👨‍💻 Maintainer & Version Info
-Field	Value
-Maintainer	KevDog
-Version	2025.11.09
-Compatible with	acme.sh ≥ 3.0.8
-Repository	github.com/kevdogg/ansible-acme-sh
-Last Updated	🕓 2025-11-09
+---
+
+## 🧾 License
+
+Licensed under the **MIT License** — see [LICENSE](LICENSE).
+
+---
+
+## 👨‍💻 Maintainer & Version Info
+
+| Field | Value |
+|--------|--------|
+| Maintainer | **KevDog** |
+| Version | **2025.11.09** |
+| Compatible with | **acme.sh ≥ 3.0.8** |
+| Repository | [github.com/kevdogg/ansible-acme-sh](https://github.com/kevdogg/ansible-acme-sh) |
+| Last Updated | 🕓 **2025-11-09** |
