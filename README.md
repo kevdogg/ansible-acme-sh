@@ -445,7 +445,7 @@ You can control execution using Ansible tags:
 
 ### Example Runs
 
-
+```bash
 # 1️⃣ Full role execution (typical run)
 ansible-playbook playbook.yml
 
@@ -466,7 +466,7 @@ ansible-playbook playbook.yml --tags summary
 
 # 7️⃣ Run filter plugin validation (for developers)
 ansible-playbook playbook.yml --tags test-filters -vvv
-
+```
 🏷️ Execution Tags Reference
 Tag	Description
 plan	Runs the preflight analysis and generates the domain action plan.
