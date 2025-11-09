@@ -434,22 +434,150 @@ acme_sh_domains:
   - domains: ["admin.example.com"]
     force_renew: True
 ```
+⚙️ ACME.SH Role Execution Flow & Tags Overview
 
-*If you're looking for an Ansible role to create users, then check out my
-[user role](https://github.com/nickjj/ansible-user)*.
+This role automates the full lifecycle of certificate management with acme.sh, including planning, issuance, renewal, and teardown.
+Each major stage is independently taggable for fine-grained control or selective execution.
 
-Now you would run `ansible-playbook -i inventory/hosts site.yml -t acme_sh`.
+🧭 Basic Usage
 
-## Installation
+You can control execution using Ansible tags:
 
-`$ ansible-galaxy install lionslair.acme_sh`
+### Example Runs
 
-## Ansible Galaxy
+```bash
+# 1️⃣ Full role execution (typical run)
+ansible-playbook playbook.yml
 
-You can find it on the official
-[Ansible Galaxy](https://galaxy.ansible.com/nickjj/acme_sh/) if you want to
-rate it.
+# 2️⃣ Run without debug noise
+ansible-playbook playbook.yml --skip-tags debug
 
-## License
+# 3️⃣ Only run issuance/renewal workflow
+ansible-playbook playbook.yml --tags workflow
 
-MIT
+# 4️⃣ Only remove expired or flagged domains
+ansible-playbook playbook.yml --tags remove
+
+# 5️⃣ Fully uninstall acme.sh and cleanup all traces
+ansible-playbook playbook.yml --tags remove_all
+
+# 6️⃣ Only show final summary after previous run
+ansible-playbook playbook.yml --tags summary
+
+# 7️⃣ Run filter plugin validation (for developers)
+ansible-playbook playbook.yml --tags test-filters -vvv
+
+🏷️ Execution Tags Reference
+Tag	Description
+plan	Runs the preflight analysis and generates the domain action plan.
+install_acme.sh	Installs acme.sh, sets up environment and systemd timers.
+workflow	Issues, renews, and deploys domain certificates.
+remove_all	Performs full teardown: removes all certs, timers, and acme.sh itself.
+summary	Displays compact results and optional plan-vs-actual comparison.
+debug	Enables detailed debugging or test tasks like filter verification.
+notify	Configures notification hooks (email, Slack, etc.).
+teardown	Synonym for remove_all, ensures complete cleanup when uninstalling.
+🔄 Role Execution Flow (ASCII Diagram)
+┌───────────────────────────────────────────────────────────────┐
+│                        Preflight Phase                        │
+│---------------------------------------------------------------│
+│  acme-plan.yml → Build domain plan                            │
+│  acme-plan-summary-compact.yml → Display planned actions       │
+└──────────────┬────────────────────────────────────────────────┘
+               │
+               ▼
+┌───────────────────────────────────────────────────────────────┐
+│                   Installation Phase                          │
+│---------------------------------------------------------------│
+│  acme-install-acme-sh.yml → Install acme.sh, setup systemd     │
+│  acme-resolve-acme-paths.yml → Resolve binaries and paths      │
+└──────────────┬────────────────────────────────────────────────┘
+               │
+               ▼
+┌───────────────────────────────────────────────────────────────┐
+│                  Workflow Phase (Default)                     │
+│---------------------------------------------------------------│
+│  acme-domain-workflow.yml → Issue / renew / deploy certs      │
+│  [debug-tag tasks show live progress per domain]              │
+└──────────────┬────────────────────────────────────────────────┘
+               │
+               ▼
+┌───────────────────────────────────────────────────────────────┐
+│                     Removal Phase                             │
+│---------------------------------------------------------------│
+│  acme-domain-remove.yml → Remove selected domains             │
+│  acme-remove-all.yml → Full teardown (when uninstall enabled) │
+└──────────────┬────────────────────────────────────────────────┘
+               │
+               ▼
+┌───────────────────────────────────────────────────────────────┐
+│                     Postflight Phase                          │
+│---------------------------------------------------------------│
+│  acme-summary-compact.yml → Show final results summary         │
+│  Includes plan vs actual deltas when enabled                  │
+└──────────────┬────────────────────────────────────────────────┘
+               │
+               ▼
+┌───────────────────────────────────────────────────────────────┐
+│                    Developer / Debug Mode                     │
+│---------------------------------------------------------------│
+│  test-filters.yml → Validate CLI flag filter plugins           │
+│  (Run manually with `--tags test-filters`)                    │
+└───────────────────────────────────────────────────────────────┘
+
+🧭 Role Execution Flow (Mermaid Diagram)
+flowchart TD
+  A[🧩 Preflight Phase<br/>acme-plan.yml / summary] --> B[⚙️ Installation Phase<br/>acme-install-acme-sh.yml]
+  B --> C[🔁 Workflow Phase<br/>acme-domain-workflow.yml]
+  C --> D[🗑️ Removal Phase<br/>acme-domain-remove.yml]
+  D --> E[🧹 Full Teardown<br/>acme-remove-all.yml]
+  E --> F[📋 Postflight Summary<br/>acme-summary-compact.yml]
+  F --> G[🧪 Developer / Filter Test<br/>test-filters.yml]
+
+  style A fill:#E3F2FD,stroke:#1E88E5,stroke-width:2px
+  style B fill:#E8F5E9,stroke:#43A047,stroke-width:2px
+  style C fill:#FFF8E1,stroke:#FDD835,stroke-width:2px
+  style D fill:#FFEBEE,stroke:#E53935,stroke-width:2px
+  style E fill:#F3E5F5,stroke:#8E24AA,stroke-width:2px
+  style F fill:#F1F8E9,stroke:#7CB342,stroke-width:2px
+  style G fill:#ECEFF1,stroke:#546E7A,stroke-width:2px
+
+🎨 Legend
+Color	Phase	Description
+🟦 Blue (#E3F2FD)	Preflight	Planning and path resolution — safe preview of what actions will occur.
+🟩 Green (#E8F5E9)	Installation	Installs acme.sh, sets up directories, timers, and notifications.
+🟨 Yellow (#FFF8E1)	Workflow	Issues, renews, and deploys certificates for each configured domain.
+🟥 Red (#FFEBEE)	Removal	Removes selected or all domain certificates (per-domain cleanup).
+🟪 Purple (#F3E5F5)	Full Teardown	Uninstalls acme.sh entirely and cleans all related files.
+🟩 Light Green (#F1F8E9)	Postflight Summary	Displays final compact summary and compares plan vs. actual results.
+🩶 Gray (#ECEFF1)	Developer / Debug	Runs internal test suites and diagnostic filter validations.
+📘 Tag → Task Mapping (Quick Reference)
+Tag	Executes These Files	Purpose
+plan	acme-plan.yml, acme-plan-summary-compact.yml	Preflight analysis and display planned actions
+install_acme.sh	acme-install-acme-sh.yml	Install and initialize acme.sh environment
+workflow	acme-domain-workflow.yml	Issue, renew, and deploy certificates
+remove_all	acme-remove-all.yml	Uninstall acme.sh and remove all certs/timers
+summary	acme-summary-compact.yml	Post-run summary report
+debug	test-filters.yml, debug-acme-scoreboard.yml	Developer tests and verbose scoreboards
+notify	Included inside acme-install-acme-sh.yml	Configure mail/Slack hooks
+teardown	Alias for remove_all	Full cleanup/uninstall workflow
+🧩 Development Notes
+
+The test-filters.yml file can be run standalone to validate custom CLI flag filters:
+
+ansible-playbook roles/kevdogg.acme_sh/tasks/test-filters.yml -vvv
+
+
+For developer mode, increase verbosity:
+
+ansible-playbook playbook.yml --tags debug -vvv
+
+
+For local development, you can reference the role directly in ansible.cfg:
+
+roles_path = ~/git/roles:/etc/ansible/roles
+
+
+✅ Maintainer: KevDog
+📦 Version: 2025.11.09 — Compatible with acme.sh ≥ 3.0.8
+🕓 Last Updated: 2025-11-09

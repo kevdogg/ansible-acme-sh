@@ -1,83 +1,98 @@
 ---
+# ============================================================================
+# main.yml — ACME.SH Role Entry Point
+# ----------------------------------------------------------------------------
+# Purpose:
+#   Central task orchestrator for ACME certificate lifecycle management.
+#   This role automates installation, issuance, renewal, and teardown of
+#   acme.sh-managed certificates across multiple domains.
+#
+# Includes:
+#   • acme-install-acme-sh.yml       → Installs acme.sh and systemd setup
+#   • acme-domain-workflow.yml       → Handles per-domain issue/renew/deploy
+#   • acme-domain-remove.yml         → Handles selective domain removal
+#   • acme-remove-all.yml            → Performs full uninstallation
+#   • acme-plan.yml / summary files  → Preflight and postflight reports
+#   • test-filters.yml               → Developer-only plugin validation
+#
+# Tag model:
+#   - plan ............: Build & display preflight plan
+#   - workflow ........: Issue / renew / deploy certificates
+#   - install_acme.sh .: Install acme.sh + setup systemd timer/service
+#   - remove ..........: Remove selected domain(s)
+#   - remove_all ......: Full uninstall and cleanup
+#   - summary .........: Compact post-execution report
+#   - debug ...........: Diagnostic output (skippable with --skip-tags debug)
+#   - test-filters ....: Developer-only plugin test suite
+#
+# Version: 2025.11.09
+# Maintainer: KevDog
+# Tags: [acme, letsencrypt, workflow, automation, lifecycle, debug]
+# ============================================================================
+
+
 ########################
 # PreTasks
-#######################
-- name: Debug to Show all ansible variable
-  ansible.builtin.debug:
-    msg: item
-  loop: "{{ acme_sh_domains }}" 
-  become_user: "{{ acme_sh_become_user }}"
-  tags:
-    - debug
+########################
 
-# Prepare a structure for tracking results
-# Lists will be appended during execution
+- name: Debug to show all ACME domain variables
+  ansible.builtin.debug:
+    msg: "{{ item }}"
+  loop: "{{ acme_sh_domains }}"
+  become_user: "{{ acme_sh_become_user }}"
+  tags: [debug]
+
 - name: Initialize ACME summary scoreboard
   ansible.builtin.set_fact:
     acme_summary:
       installed: "{{ acme_summary.installed | default([]) }}"
-      renewed: "{{ acme_summary.renewed | default([]) }}"
-      skipped: "{{ acme_summary.skipped | default([]) }}"
-      removed: "{{ acme_summary.removed | default([]) }}"
-      failed: "{{ acme_summary.failed | default([]) }}"
-      warnings: "{{ acme_summary.warnings | default([]) }}"
-  tags: always
+      renewed:   "{{ acme_summary.renewed | default([]) }}"
+      skipped:   "{{ acme_summary.skipped | default([]) }}"
+      removed:   "{{ acme_summary.removed | default([]) }}"
+      failed:    "{{ acme_summary.failed | default([]) }}"
+      warnings:  "{{ acme_summary.warnings | default([]) }}"
+  tags: [always]
 
 - name: Resolve ACME paths and executables
-  ansible.builtin.include_tasks:
-    file: acme-resolve-acme-paths.yml
-  tags: always
+  ansible.builtin.include_tasks: acme-resolve-acme-paths.yml
+  tags: [setup]
 
-- name: acme.sh Plan
-  ansible.builtin.include_tasks:
-    file: acme-plan.yml
-  tags: plan
+- name: Generate ACME preflight plan
+  ansible.builtin.include_tasks: acme-plan.yml
+  tags: [plan]
 
-# Show preflight summary
 - name: Display preflight plan summary
   ansible.builtin.include_tasks: acme-plan-summary-compact.yml
-  tags: plan
+  tags: [plan]
+
 
 ########################
-# Issue/Renew Phase
-#######################
+# Issue / Renew Phase
+########################
 
-# ============================================================================
-# Install acme.sh (Per-Host Setup)
-# ----------------------------------------------------------------------------
-# Includes:
-#   - Git clone and installation of acme.sh
-#   - Directory and environment setup
-#   - Systemd timer/service creation for auto-renewals
-#   - Optional notification configuration
-# ============================================================================
 - name: Install acme.sh if not installed
-  ansible.builtin.include_tasks:
-    file: acme-install-acme-sh.yml
+  ansible.builtin.include_tasks: acme-install-acme-sh.yml
   when:
     - not (acme_sh_uninstall | default(acme_sh_default_uninstall | default(false)) | bool)
-  tags: install_acme.sh
+  tags: [install_acme.sh, workflow]
 
-
-### Issue/Renew and Deploy acme.sh certs
-### Includes Force renew and acme.sh custom command
-- name: Obtain and Install/Renew acme.sh certificates
-  ansible.builtin.include_tasks:
-    file:  acme_domain-workflow.yml
+- name: Obtain and install/renew acme.sh certificates
+  ansible.builtin.include_tasks: acme-domain-workflow.yml
   loop: "{{ acme_sh_domains }}"
   loop_control:
     label: "{{ item.domains[0] }}"
   when:
-    - acme_sh_domains is defined and acme_sh_doamin | length > 0
+    - acme_sh_domains is defined and acme_sh_domains | length > 0
     - item.domains is defined and item.domains | length > 0
     - not item.remove | default(false) | bool
     - not (acme_sh_uninstall | default(acme_sh_default_uninstall | default(false)) | bool)
+  tags: [workflow]
+
 
 ############################
 # Remove Certificate Phase
 ############################
 
-### Remove/Inactivate Certificates (Per Domain Task)
 - name: Process ACME domain removals
   ansible.builtin.include_tasks: acme-domain-remove.yml
   loop: "{{ acme_sh_domains }}"
@@ -88,52 +103,38 @@
     - item.domains is defined and item.domains | length > 0
     - item.remove | default(false) | bool
     - not (acme_sh_uninstall | default(acme_sh_default_uninstall | default(false)) | bool)
+  tags: [remove]
+
 
 ############################
-# Remove All Phase
+# Full Uninstall Phase
 ############################
-## Uninstall everything -- Uninstall acme.sh and all issued certificates and remove all timers/service files
+
 - name: 🧹 Full ACME teardown (remove all certs, services, and acme.sh)
-  ansible.builtin.include_tasks:
-    file: acme-remove-all.yml
+  ansible.builtin.include_tasks: acme-remove-all.yml
   when:
     - acme_sh_uninstall | default(acme_sh_default_uninstall | default(false)) | bool
   tags: [remove_all, teardown]
 
-# ==========================================================
-# 🧩 Developer / Diagnostic Section
-# ----------------------------------------------------------
-# Validates custom filter plugins such as:
-#   - has_flag
-#   - add_flag_if_missing
-#   - ensure_flags_present
-#   - remove_flag
-#
-# Supports both:
-#   • Standalone mode  →  ansible-playbook tasks/test-filters.yml
-#   • Integrated mode  →  ansible-playbook main.yml --tags test-filters -vvv
-# ==========================================================
+
+############################
+# Developer / Diagnostic
+############################
 
 - name: Run filter plugin test suite (developer debug only)
-  ansible.builtin.include_tasks:
-    file: test-filters.yml
+  ansible.builtin.include_tasks: test-filters.yml
   when:
-    - ansible_verbosity | int >= 3
     - "'test-filters' in ansible_run_tags"
-  tags: [debug, test-filters]
+  tags: [test-filters]
 
-# ==========================================================
-# 📋 Final Compact Summary
-# ----------------------------------------------------------
-# Always runs at end-of-role unless disabled.
-# Shows installed / renewed / removed / failed domains,
-# with optional plan delta comparison.
-# ==========================================================
+
+############################
+# Final Summary
+############################
 
 - name: Include final summary
   ansible.builtin.include_tasks: acme-summary-compact.yml
   when:
     - acme_summary is defined
-  tags: summary
-
+  tags: [summary]
 

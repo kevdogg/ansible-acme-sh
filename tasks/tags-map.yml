@@ -1,0 +1,110 @@
+---
+# ============================================================================
+# tags-map.yml
+# ----------------------------------------------------------------------------
+# Purpose:
+#   Reference map of all tags used in the kevdogg.acme_sh role.
+#   Documents where each tag appears and what it does.
+#
+# Notes:
+#   - Contains only verified tags and files present in the current repo.
+#   - Does not invent or reference removed / obsolete files.
+#   - Update this when new tags are added or removed.
+#
+# Version: 2025.11.09
+# Maintainer: KevDog
+# ============================================================================
+
+tags_map:
+
+  acme:
+    description: >
+      Primary role tag used when including kevdogg.acme_sh from the outer playbook.
+      Useful for isolating ACME operations from other roles.
+    used_in:
+      - (outer playbook) include_role: name=kevdogg.acme_sh
+
+  install_acme.sh:
+    description: >
+      Handles acme.sh installation and setup.
+      Includes git clone/update, install/upgrade, default CA selection,
+      notification hooks, and systemd unit deployment.
+    used_in:
+      - tasks/main.yml: include_tasks -> acme-install-acme-sh.yml
+      - tasks/acme-install-acme-sh.yml: all tasks under this include
+
+  notify:
+    description: >
+      Configures notification integrations for acme.sh (e.g. Mailgun).
+      Runs only the notification-related setup portions of installation.
+    used_in:
+      - tasks/acme-install-acme-sh.yml: "Enable acme.sh notification"
+    typical_cli:
+      - ansible-playbook playbook.yml --tags notify
+
+  plan:
+    description: >
+      Runs preflight planning phase to show intended certificate actions
+      (install, renew, remove) and compare against existing state.
+    used_in:
+      - tasks/acme-plan.yml
+      - tasks/acme-plan-summary-compact.yml
+
+  summary:
+    description: >
+      Produces the final compact end-of-role summary of installed, renewed,
+      removed, failed, and skipped domains.
+      Optionally compares PLAN vs ACTUAL execution results.
+    used_in:
+      - tasks/acme-summary-compact.yml
+
+  debug:
+    description: >
+      Enables extended verbose output, debug snapshots, and scoreboard dumps.
+      Used in several roles for troubleshooting and development.
+    used_in:
+      - tasks/acme-domain-workflow.yml: verbose scoreboard snapshots
+      - tasks/acme-domain-remove.yml: optional verbose mode
+      - tasks/acme-summary-compact.yml: optional verbose snapshot section
+      - tasks/debug-acme-scoreboard.yml: all tasks
+    typical_cli:
+      - ansible-playbook playbook.yml --tags debug
+
+  warn:
+    description: >
+      Warning-related messages such as dual-cert detection or missing certs
+      during removal. Purely informational.
+    used_in:
+      - tasks/acme-domain-remove.yml: dual-cert warning
+      - tasks/acme-remove-all.yml: "Warn if no certificates detected"
+
+  remove:
+    description: >
+      Performs per-domain cleanup using acme.sh --remove.
+      Used when item.remove=true in the domain list.
+    used_in:
+      - tasks/acme-domain-remove.yml
+
+  remove_all:
+    description: >
+      Full uninstall path: stops systemd timers, removes all managed certs,
+      uninstalls acme.sh, deletes its git repo and directories.
+    used_in:
+      - tasks/main.yml: include_tasks -> acme-remove-all.yml
+      - tasks/acme-remove-all.yml
+
+  test-filters:
+    description: >
+      Executes standalone filter plugin validation for CLI flag utilities
+      (has_flag, remove_flag, add_flag_if_missing, etc.).
+      Runs locally, does not touch remote hosts.
+    used_in:
+      - tasks/test-filters.yml
+    typical_cli:
+      - ansible-playbook playbook.yml --tags test-filters
+      - ansible-playbook roles/kevdogg.acme_sh/tasks/test-filters.yml
+
+# ============================================================================
+# End of tags-map.yml
+# ============================================================================
+
