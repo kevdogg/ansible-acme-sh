@@ -78,17 +78,32 @@ acme_sh_systemd_timer_path: >-
 # acme.sh Related
 # ============================================================================
 
+# ===================
+# Static variables
+# ===================
+
 acme_sh_become_user: "{{ ansible_become_user }}"
+
+# Default Bash executable path (used in all shell tasks)
+bash_executable_path: "{{ acme_sh_default_executable_path | default('/bin/bash') }}"
+
+acme_sh_dependencies: ["cron", "git", "wget", "curl", "openssl"]
+
+acme_sh_renew_time_in_days: 30
+
+acme_sh_list_domains: true
+
+# ===================
+# Defaults
+# ===================
+
 acme_sh_default_directory: "~/.acme.sh"
 acme_sh_default_executable: "{{ acme_sh_default_directory }}/acme.sh"
 acme_sh_default_executable_path: "/bin/bash"
 acme_sh_default_bin: "{{ acme_sh_default_executable }}"
-# Default Bash executable path (used in all shell tasks)
-bash_executable_path: "{{ acme_sh_default_executable_path | default('/bin/bash') }}"
 
 acme_sh_default_install_directory_permissions: "0755"
 
-acme_sh_dependencies: ["cron", "git", "wget", "curl", "openssl"]
 
 acme_sh_default_git_version: "master"
 acme_sh_default_git_url: "https://github.com/acmesh-official/acme.sh.git"
@@ -96,16 +111,12 @@ acme_sh_default_git_clone_dest: "/root/git/acme.sh"
 acme_sh_default_git_clone_force: false
 
 acme_sh_default_upgrade: true
-acme_sh_uninstall: false
 
 acme_sh_default_account_email: "{{ vault_acme_sh_account_email }}"
-
-acme_sh_renew_time_in_days: 30
 
 acme_sh_default_copy_certs_to_path: "/etc/ssl/letsencrypt"
 acme_sh_default_pkcs12_password: "pass"
 
-acme_sh_list_domains: true
 acme_sh_default_staging: true
 
 acme_sh_default_force_issue: false
@@ -137,39 +148,120 @@ acme_sh_default_issue_pre_hook: ""
 acme_sh_default_issue_post_hook: ""
 acme_sh_default_issue_renew_hook: ""
 
+# Remove acme.sh
+acme_sh_default_uninstall: false
+
+# Domain Removal
 acme_sh_default_remove: false
+acme_sh_default_remove_all_variants: false
+
+# Full uninstall
+acme_sh_default_remove_deployed_certs_on_uninstall: false
 
 acme_sh_default_challenge_alias: ""
 acme_sh_default_domain_alias: ""
 
 acme_sh_default_server: "letsencrypt"
 
+# ===================
+# User Defined overrides which can be placed in group_vars/host_vars
+# ===================
+
+acme_sh_directory: "{{ acme_sh_default_directory }}"
+acme_sh_executable: "{{ acme_sh_default_executable }}"
+acme_sh_executable_path: "{{ acme_sh_default_executable_path }}"
+acme_sh_bin: "{{ acme_sh_default_bin }}"
+
+acme_sh_install_directory_permissions: "{{ acme_sh_default_install_directory_permissions }}"
+
+
+acme_sh_git_version: "{{ acme_sh_default_git_version }}"
+acme_sh_git_url: "{{ acme_sh_default_git_url }}"
+acme_sh_git_clone_dest: "{{ acme_sh_default_git_clone_dest }}"
+acme_sh_git_clone_force: "{{ acme_sh_default_git_clone_force }}"
+
+acme_sh_upgrade: "{{ acme_sh_default_upgrade }}"
+
+acme_sh_account_email: "{{ acme_sh_default_account_email }}"
+
+acme_sh_copy_certs_to_path: "{{ acme_sh_default_copy_certs_to_path }}"
+acme_sh_pkcs12_password: "{{ acme_sh_default_pkcs12_password }}"
+
+acme_sh_staging: "{{ acme_sh_default_staging }}"
+
+acme_sh_force_issue: "{{ acme_sh_default_force_issue }}"
+acme_sh_force_renew: "{{ acme_sh_default_force_renew }}"
+acme_sh_force_renew_all: "{{ acme_sh_default_force_renew_all }}"
+
+acme_sh_debug: "{{ acme_sh_default_debug }}"
+acme_sh_show_plan_deltas: "{{ acme_sh_default_show_plan_deltas }}"
+
+acme_sh_dns_provider: "{{ acme_sh_default_dns_provider }}"
+acme_sh_dns_provider_api_keys: "{{ acme_sh_default_dns_provider_api_keys }}"
+acme_sh_dns_sleep: "{{ acme_sh_default_dns_sleep }}"
+
+# Base default used everywhere unless overridden
+acme_sh_extra_flags: "{{ acme_sh_default_extra_flags }}"
+
+# More specific defaults built from the base
+acme_sh_extra_flags_issue: "{{ acme_sh_default_extra_flags_issue }}"
+acme_sh_extra_flags_renew: "{{ acme_sh_default_extra_flags_renew }}"
+acme_sh_extra_flags_remove: "{{ acme_sh_default_extra_flags_remove }}"
+acme_sh_extra_flags_install_cert: "{{ acme_sh_default_extra_flags_install_cert }}"
+
+acme_sh_install_cert_reloadcmd: "{{ acme_sh_default_install_cert_reloadcmd }}"
+
+acme_sh_issue_pre_hook: "{{ acme_sh_default_issue_pre_hook }}"
+acme_sh_issue_post_hook: "{{ acme_sh_default_issue_post_hook }}"
+acme_sh_issue_renew_hook: "{{ acme_sh_default_issue_renew_hook }}"
+
+# Remove acme.sh
+acme_sh_uninstall: "{{ acme_sh_default_uninstall }}"
+
+# Domain Removal
+acme_sh_remove: "{{ acme_sh_default_remove }}"
+acme_sh_remove_all_variants: "{{ acme_sh_default_remove_all_variants }}"
+
+# Full uninstall
+acme_sh_remove_deployed_certs_on_uninstall: "{{ acme_sh_default_remove_deployed_certs_on_uninstall }}"
+
+acme_sh_challenge_alias: "{{ acme_sh_default_challenge_alias }}"
+acme_sh_domain_alias: "{{ acme_sh_default_domain_alias }}"
+
+acme_sh_server: "{{ acme_sh_default_server }}"
+
+
 # ============================================================================
 # Notifications
 # ============================================================================
 
-acme_sh_enable_notify: true
+acme_sh_default_enable_notify: true
 
 # Safe defaults (ensures playbooks still run without vault-defined values)
 acme_sh_default_notify_hooks: []
 acme_sh_default_notify_env_var: {}
 
-acme_sh_notify_hooks: ["mailgun"]
-acme_sh_notify_env_var:
-  "MAILGUN_API_KEY": "{{ vault_mailgun_api_key }}"
-  "MAILGUN_API_DOMAIN": "{{ vault_mailgun_api_domain }}"
-  "MAILGUN_FROM": "{{ 'acme-' + ansible_fqdn + '@' + vault_mailgun_api_domain }}"
-  "MAILGUN_TO": "{{ vault_mailgun_to }}"
 
 # --notify-level <0|1|2|3> Default 2
 #    0: disabled, no notification will be sent.
 #    1: send notification only when there is an error.
 #    2: send notification on successful renewal or error.
 #    3: send notification for every skipped, renewed, or failed cert.
-acme_sh_notify_level: 2
+acme_sh_default_notify_level: 0
 
 # --notify-mode <0|1> Default 0
 #    0: Bulk mode — one message for all domains.
 #    1: Cert mode — separate message for each cert.
-acme_sh_notify_mode: 0
+acme_sh_default_notify_mode: 0
+
+acme_sh_enable_notify: "{{ acme_sh_default_enable_notify }}"
+acme_sh_notify_hooks: ["mailgun"]
+acme_sh_notify_env_var:
+  "MAILGUN_API_KEY": "{{ vault_mailgun_api_key }}"
+  "MAILGUN_API_DOMAIN": "{{ vault_mailgun_api_domain }}"
+  "MAILGUN_FROM": "{{ 'acme-' + ansible_fqdn + '@' + vault_mailgun_api_domain }}"
+  "MAILGUN_TO": "{{ vault_mailgun_to }}"
+  "MAILGUN_REGION": "{{ vault_mailgun_region }}"
+acme_sh_notify_level: 2
+acme_sh_notify_mode: "{{ acme_sh_default_notify_mode }}"
 

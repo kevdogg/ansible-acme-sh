@@ -30,6 +30,24 @@
 # Tags: [acme, letsencrypt, workflow, automation, lifecycle, debug]
 # ============================================================================
 
+# Normalize uninstall boolean once (so you don’t repeat default() chains)
+- name: Normalize uninstall toggle
+  ansible.builtin.set_fact:
+    _acme_uninstall: "{{ (acme_sh_uninstall | default(acme_sh_default_uninstall, true)) | bool }}"
+  tags: [always]
+
+########################
+# Ensure acme is installed
+########################
+# IMPORTANT:
+# - Do NOT run this during full uninstall
+# - Do NOT tag it with "remove" (domain-remove still needs acme.sh present, but you can install if missing anyway)
+- name: Install acme.sh if not installed
+  ansible.builtin.include_tasks: acme-install-acme-sh.yml
+  become: true
+  become_user: "{{ acme_sh_become_user }}"
+  when: not _acme_uninstall
+  tags: [install_acme.sh, workflow, plan]
 
 ########################
 # PreTasks
@@ -38,7 +56,7 @@
 - name: Debug to show all ACME domain variables
   ansible.builtin.debug:
     msg: "{{ item }}"
-  loop: "{{ acme_sh_domains }}"
+  loop: "{{ acme_sh_domains | default([]) }}"
   become_user: "{{ acme_sh_become_user }}"
   tags: [debug]
 
@@ -46,48 +64,41 @@
   ansible.builtin.set_fact:
     acme_summary:
       installed: "{{ acme_summary.installed | default([]) }}"
-      renewed:   "{{ acme_summary.renewed | default([]) }}"
-      skipped:   "{{ acme_summary.skipped | default([]) }}"
-      removed:   "{{ acme_summary.removed | default([]) }}"
-      failed:    "{{ acme_summary.failed | default([]) }}"
-      warnings:  "{{ acme_summary.warnings | default([]) }}"
+      renewed:   "{{ acme_summary.renewed   | default([]) }}"
+      skipped:   "{{ acme_summary.skipped   | default([]) }}"
+      removed:   "{{ acme_summary.removed   | default([]) }}"
+      failed:    "{{ acme_summary.failed    | default([]) }}"
+      warnings:  "{{ acme_summary.warnings  | default([]) }}"
   tags: [always]
 
-- name: Resolve ACME paths and executables
-  ansible.builtin.include_tasks: acme-resolve-acme-paths.yml
-  tags: [setup]
-
+########################
+# Plan Phase
+########################
+# If user runs --tags plan, this runs (and only then).
 - name: Generate ACME preflight plan
   ansible.builtin.include_tasks: acme-plan.yml
+  when:
+    - not _acme_uninstall
+    - "'plan' in ansible_run_tags"
   tags: [plan]
-
-- name: Display preflight plan summary
-  ansible.builtin.include_tasks: acme-plan-summary-compact.yml
-  tags: [plan]
-
 
 ########################
 # Issue / Renew Phase
 ########################
 
-- name: Install acme.sh if not installed
-  ansible.builtin.include_tasks: acme-install-acme-sh.yml
-  when:
-    - not (acme_sh_uninstall | default(acme_sh_default_uninstall | default(false)) | bool)
-  tags: [install_acme.sh, workflow]
-
 - name: Obtain and install/renew acme.sh certificates
   ansible.builtin.include_tasks: acme-domain-workflow.yml
-  loop: "{{ acme_sh_domains }}"
+  loop: "{{ acme_sh_domains | default([]) }}"
   loop_control:
-    label: "{{ item.domains[0] }}"
+    label: "{{ item.domains[0] | default('UNKNOWN') }}"
   when:
-    - acme_sh_domains is defined and acme_sh_domains | length > 0
-    - item.domains is defined and item.domains | length > 0
-    - not item.remove | default(false) | bool
-    - not (acme_sh_uninstall | default(acme_sh_default_uninstall | default(false)) | bool)
+    - not _acme_uninstall
+    - acme_sh_domains is defined
+    - acme_sh_domains | length > 0
+    - item.domains is defined
+    - item.domains | length > 0
+    - not (item.remove | default(false) | bool)
   tags: [workflow]
-
 
 ############################
 # Remove Certificate Phase
@@ -95,16 +106,17 @@
 
 - name: Process ACME domain removals
   ansible.builtin.include_tasks: acme-domain-remove.yml
-  loop: "{{ acme_sh_domains }}"
+  loop: "{{ acme_sh_domains | default([]) }}"
   loop_control:
-    label: "{{ item.domains[0] }}"
+    label: "{{ item.domains[0] | default('UNKNOWN') }}"
   when:
-    - acme_sh_domains is defined and acme_sh_domains | length > 0
-    - item.domains is defined and item.domains | length > 0
+    - not _acme_uninstall
+    - acme_sh_domains is defined
+    - acme_sh_domains | length > 0
+    - item.domains is defined
+    - item.domains | length > 0
     - item.remove | default(false) | bool
-    - not (acme_sh_uninstall | default(acme_sh_default_uninstall | default(false)) | bool)
   tags: [remove]
-
 
 ############################
 # Full Uninstall Phase
@@ -112,10 +124,8 @@
 
 - name: 🧹 Full ACME teardown (remove all certs, services, and acme.sh)
   ansible.builtin.include_tasks: acme-remove-all.yml
-  when:
-    - acme_sh_uninstall | default(acme_sh_default_uninstall | default(false)) | bool
+  when: _acme_uninstall
   tags: [remove_all, teardown]
-
 
 ############################
 # Developer / Diagnostic
@@ -123,10 +133,8 @@
 
 - name: Run filter plugin test suite (developer debug only)
   ansible.builtin.include_tasks: test-filters.yml
-  when:
-    - "'test-filters' in ansible_run_tags"
+  when: "'test-filters' in ansible_run_tags"
   tags: [test-filters]
-
 
 ############################
 # Final Summary
@@ -134,7 +142,5 @@
 
 - name: Include final summary
   ansible.builtin.include_tasks: acme-summary-compact.yml
-  when:
-    - acme_summary is defined
+  when: acme_summary is defined
   tags: [summary]
-

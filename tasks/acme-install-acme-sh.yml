@@ -24,87 +24,147 @@
 # Tags: [acme, letsencrypt, automation, setup, systemd, notifications]
 # ============================================================================
 
-- name: Determine if acme.sh is installed
+# Resolve host-level paths
+- name: Resolve acme.sh base directory (host)
+  ansible.builtin.set_fact:
+    acme_sh_directory_resolved: >-
+      {{
+        (acme_sh_directory | default(acme_sh_default_directory, true))
+        | expanduser
+      }}
+  become: true
+  become_user: "{{ acme_sh_become_user }}"
+
+- name: Resolve acme.sh binary path (host)
+  ansible.builtin.set_fact:
+    acme_sh_bin: >-
+      {{
+        acme_sh_bin | default(acme_sh_directory_resolved ~ '/acme.sh', true)
+      }}
+  become: true
+  become_user: "{{ acme_sh_become_user }}"
+
+# Check binary existence
+- name: Check whether acme.sh binary exists
   ansible.builtin.stat:
     path: "{{ acme_sh_bin }}"
-  register: is_acme_sh_installed
+  register: _acme_sh_bin_stat
+  changed_when: false
   become: true
   become_user: "{{ acme_sh_become_user }}"
 
-- name: Ensure acme.sh home directory exists
-  ansible.builtin.file:
-    path: "{{ acme_sh_directory_resolved }}"
-    state: directory
-    mode: '0755'
+# Optional PATH fallback
+- name: Try to locate acme.sh in PATH when expected path is missing
+  ansible.builtin.command: "command -v acme.sh"
+  register: _acme_sh_path_lookup
+  changed_when: false
+  failed_when: false
+  when: not _acme_sh_bin_stat.stat.exists
+  become: true
+  become_user: "{{ acme_sh_become_user }}"
+
+- name: Adopt PATH acme.sh if found
+  ansible.builtin.set_fact:
+    acme_sh_bin: "{{ _acme_sh_path_lookup.stdout }}"
   when:
-    - not (is_acme_sh_installed.stat.exists | bool)
+    - not _acme_sh_bin_stat.stat.exists
+    - _acme_sh_path_lookup.rc == 0
+    - _acme_sh_path_lookup.stdout | length > 0
   become: true
   become_user: "{{ acme_sh_become_user }}"
 
-- name: Determine if acme.sh git repository is cloned locally
+- name: Re-check acme.sh binary exists after PATH fallback
   ansible.builtin.stat:
-    path: "{{ (item.acme_sh_git_clone_dest | default(acme_sh_default_git_clone_dest)) ~ '/.git' }}"
-  register: is_acme_sh_cloned_locally
+    path: "{{ acme_sh_bin }}"
+  register: _acme_sh_bin_stat2
+  changed_when: false
   become: true
   become_user: "{{ acme_sh_become_user }}"
 
-- name: Create acme.sh git clone directory if it does not exist
+# Install if missing
+- name: Install acme.sh from git when missing
+  when:
+    - not _acme_sh_bin_stat2.stat.exists
+    - acme_sh_install_from_git | default(true) | bool
+  become: true
+  become_user: "{{ acme_sh_become_user }}"
+  block:
+    - name: Ensure git is installed
+      ansible.builtin.package:
+        name: git
+        state: present
+
+    - name: Ensure acme.sh home directory exists
+      ansible.builtin.file:
+        path: "{{ acme_sh_directory_resolved }}"
+        state: directory
+        mode: "0755"
+
+    - name: Clone/update acme.sh repo
+      ansible.builtin.git:
+        repo: "{{ acme_sh_git_url | default(acme_sh_default_git_url | default('https://github.com/acmesh-official/acme.sh.git')) }}"
+        dest: "{{ acme_sh_git_clone_dest | default(acme_sh_default_git_clone_dest | default(acme_sh_directory_resolved ~ '/src')) }}"
+        version: "{{ acme_sh_git_version | default(acme_sh_default_git_version | default('master')) }}"
+        update: true
+        force: "{{ acme_sh_git_clone_force | default(acme_sh_default_git_clone_force | default(false)) | bool }}"
+
+    - name: Run acme.sh installer (idempotent)
+      ansible.builtin.command: >
+        {{ (acme_sh_git_clone_dest | default(acme_sh_default_git_clone_dest | default(acme_sh_directory_resolved ~ '/src'))) }}/acme.sh
+        --install
+        --accountemail {{ acme_sh_account_email | default(acme_sh_default_account_email) }}
+        --home {{ acme_sh_directory_resolved }}
+        --nocron
+      args:
+        creates: "{{ acme_sh_directory_resolved }}/acme.sh"
+      register: _acme_install
+      changed_when: _acme_install.rc == 0
+
+    - name: Ensure installed binary executable
+      ansible.builtin.file:
+        path: "{{ acme_sh_directory_resolved }}/acme.sh"
+        state: file
+        mode: "0755"
+
+    - name: Repoint acme_sh_bin to installed location
+      ansible.builtin.set_fact:
+        acme_sh_bin: "{{ acme_sh_directory_resolved }}/acme.sh"
+
+# Final validation
+- name: Final check acme.sh exists
+  ansible.builtin.stat:
+    path: "{{ acme_sh_bin }}"
+  register: _acme_sh_bin_final
+  changed_when: false
+  become: true
+  become_user: "{{ acme_sh_become_user }}"
+
+- name: Fail if acme.sh is still missing
+  ansible.builtin.fail:
+    msg: "acme.sh not found at {{ acme_sh_bin }} (home={{ acme_sh_directory_resolved }})"
+  when: not _acme_sh_bin_final.stat.exists
+  become: true
+  become_user: "{{ acme_sh_become_user }}"
+
+# Ensure deploy hook directory exists
+- name: Ensure acme.sh deploy hooks directory exists
   ansible.builtin.file:
-    path: "{{ item.acme_sh_git_clone_dest | default(acme_sh_default_git_clone_dest) }}"
+    path: "{{ acme_sh_directory_resolved }}/deploy"
     state: directory
-    mode: '0755'
-  when:
-    - not (is_acme_sh_cloned_locally.stat.exists | bool)
+    mode: "0755"
   become: true
   become_user: "{{ acme_sh_become_user }}"
 
-- name: Git Clone https://github.com/acmesh-official/acme.sh.git
-  ansible.builtin.git:
-    repo: "{{ item.acme_sh_git_url | default(acme_sh_default_git_url) }}"
-    depth: 1
-    clone: true
-    force: "{{ (item.acme_sh_git_clone_force | default(acme_sh_default_git_clone_force | default(false))) | bool }}"
-    dest: "{{ item.acme_sh_git_clone_dest | default(acme_sh_default_git_clone_dest) }}"
-    version: "{{ item.acme_sh_git_version | default(acme_sh_default_git_version) }}"
-  when:
-    - not (is_acme_sh_cloned_locally.stat.exists | bool)
+# Install localcopy deploy hook (script name matters)
+- name: Install localcopy deploy hook
+  ansible.builtin.template:
+    src: acme_deploy_localcopy.sh.j2
+    dest: "{{ acme_sh_directory_resolved }}/deploy/localcopy.sh"
+    mode: "0755"
   become: true
   become_user: "{{ acme_sh_become_user }}"
 
-- name: Update Git Clone https://github.com/acmesh-official/acme.sh.git if already exists
-  ansible.builtin.git:
-    repo: "{{ item.acme_sh_git_url | default(acme_sh_default_git_url) }}"
-    update: yes
-    clone: no
-    dest: "{{ item.acme_sh_git_clone_dest | default(acme_sh_default_git_clone_dest) }}"
-  become: true
-  become_user: "{{ acme_sh_become_user }}"
-  when:
-    - is_acme_sh_cloned_locally.stat.exists | bool
-
-- name: Install acme.sh
-  vars:
-    acme_exe: "{{ acme_sh_bin | default(acme_sh_default_bin, true) }}"
-  ansible.builtin.shell: >-
-    {{
-      acme_exe ~ ' --install' ~
-      ' --accountemail "' ~ (item.acme_sh_account_email | default(acme_sh_default_account_email)) ~ '"' ~
-      ' --home ' ~ acme_sh_directory_resolved ~
-      ' --nocron'
-    }}
-  args:
-    chdir: "{{ item.acme_sh_git_clone_dest | default(acme_sh_default_git_clone_dest | default('/root/.acme.sh')) }}"
-    creates: "{{ acme_sh_bin }}"
-    executable: "{{ bash_executable_path }}"
-  when:
-    - not (is_acme_sh_installed.stat.exists | bool)
-  become: true
-  become_user: "{{ acme_sh_become_user }}"
-  register: install_acme_sh_result
-  changed_when: install_acme_sh_result.rc == 0
-  failed_when: install_acme_sh_result.rc != 0
-
-- name: Upgrade acme.sh
+- name: Set auto-upgrade acme.sh
   vars:
     acme_exe: "{{ acme_sh_bin | default(acme_sh_default_bin, true) }}"
   ansible.builtin.shell: >-
@@ -128,14 +188,14 @@
   ansible.builtin.shell: >-
     {{
       acme_exe ~ ' --set-default-ca --server ' ~
-      (item.acme_sh_server | default(acme_sh_default_server | default('')))
+      (acme_sh_server | default(acme_sh_default_server | default('')))
     }}
   args:
     chdir: "{{ acme_sh_directory_resolved }}"
     executable: "{{ bash_executable_path }}"
   when:
     - not (is_acme_sh_installed.stat.exists | bool)
-    - (item.acme_sh_server | default(acme_sh_default_server | default('letsencrypt'))) | length > 0
+    - (acme_sh_server | default(acme_sh_default_server | default('letsencrypt'))) | length > 0
   become: true
   become_user: "{{ acme_sh_become_user }}"
   register: acme_default_server_result
@@ -144,11 +204,11 @@
 
 - name: Create acme.sh install directory -- Default(/etc/ssl/letsencrypt)
   ansible.builtin.file:
-    path: "{{ item.acme_sh_copy_certs_to_path | default(acme_sh_default_copy_certs_to_path) }}"
+    path: "{{ acme_sh_copy_certs_to_path | default(acme_sh_default_copy_certs_to_path) }}"
     state: directory
     owner: "{{ acme_sh_become_user }}"
     group: "{{ acme_sh_become_user }}"
-    mode: "{{ item.acme_sh_install_directory_permissions | default(acme_sh_default_install_directory_permissions) }}"
+    mode: "{{ acme_sh_install_directory_permissions | default(acme_sh_default_install_directory_permissions) }}"
   become: true
   become_user: "{{ acme_sh_become_user }}"
 

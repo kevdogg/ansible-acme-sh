@@ -26,10 +26,11 @@
 - name: PLAN SUMMARY — Compact preflight table
   vars:
     cat_icons:
-      INSTALL: "🟢"
-      REMOVE:  "🔵"
+      INSTALL:     "🟢"
+      FORCE_RENEW: "🟡"
+      REMOVE:      "🔵"
     install_count: "{{ acme_plan_summary.installs | default(0) }}"
-    renew_count: "{{ acme_plan_summary.renews | default(0) }}"
+    force_renew_count: "{{ acme_plan_summary.renews | default(0) }}"
     remove_count: "{{ acme_plan_summary.removes | default(0) }}"
     total_count: "{{ acme_plan_summary.total | default(0) }}"
     default_pw_count: "{{ acme_plan_summary.default_pw_count | default(0) }}"
@@ -47,7 +48,7 @@
       📊 **Planned Actions**
       ────────────────────────────────
       🟢 {{ install_count }} install(s)
-      🟡 {{ renew_count }} force renew(s)
+      🟡 {{ force_renew_count }} force renew(s)
       🔵 {{ remove_count }} remove(s)
       ⚠️  {{ default_pw_count }} using default PKCS#12 password
       ────────────────────────────────
@@ -73,7 +74,8 @@
 
       ────────────────────────────────
       Legend:
-        🟢 INSTALL / RENEW
+        🟢 INSTALL
+        🟡 FORCE_RENEW
         🔵 REMOVE
         ⚠️  Default password in use ('pass')
         🆕  No existing certificate

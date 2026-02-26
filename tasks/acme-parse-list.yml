@@ -1,0 +1,126 @@
+---
+# ============================================================================
+# acme-parse-list.yml
+# ----------------------------------------------------------------------------
+# Purpose:
+#   Minimal, side-effect-free parser for `acme.sh --list` (NEW format).
+#   Produces:
+#     - acme_cert_info: { "<domain>": {created, renew, days_remaining}, ... }
+#     - acme_renew_status: { "<domain>": {urgency, emoji}, ... }   (optional)
+#
+# Inputs (optional vars):
+#   acme_list_fail_on_error: bool (default true)
+#   acme_list_compute_status: bool (default true)
+# ============================================================================
+
+- name: LIST — gather existing ACME cert info
+  ansible.builtin.command: >
+    {{ acme_sh_bin | default(acme_sh_default_bin, true) }} --list
+  register: acme_list_result
+  changed_when: false
+  failed_when: false
+  become: true
+  become_user: "{{ acme_sh_become_user }}"
+  tags: [list]
+
+- name: LIST — fail if acme.sh did not run
+  ansible.builtin.fail:
+    msg: |
+      acme.sh --list failed to execute.
+      bin={{ acme_sh_bin | default(acme_sh_default_bin, true) }}
+      rc={{ acme_list_result.rc }}
+      stderr={{ acme_list_result.stderr | default('') }}
+  when:
+    - (acme_list_fail_on_error | default(true)) | bool
+    - acme_list_result.rc != 0
+  tags: [list]
+
+- name: LIST — normalize acme.sh --list output
+  ansible.builtin.set_fact:
+    _acme_lines: "{{ acme_list_result.stdout_lines | reject('match', '^\\s*$') | list }}"
+  tags: [list]
+
+- name: LIST — set empty cert info when no certs exist
+  ansible.builtin.set_fact:
+    acme_cert_info: {}
+    acme_renew_status: {}
+  when: _acme_lines | length <= 1
+  tags: [list]
+
+- name: LIST — verify required columns exist (NEW format)
+  when: _acme_lines | length > 1
+  vars:
+    _token_re: '"[^"]*"|\\S+'
+    _header_tokens: >-
+      {{
+        (_acme_lines[0] | regex_findall(_token_re))
+        | map('regex_replace', '^"(.*)"$', '\\1')
+        | list
+      }}
+  ansible.builtin.assert:
+    that:
+      - "'Main_Domain' in _header_tokens"
+      - "'Created' in _header_tokens"
+      - "'Renew' in _header_tokens"
+    fail_msg: "acme.sh --list output missing required columns: {{ _header_tokens }}"
+  tags: [list]
+
+- name: LIST — parse NEW format into acme_cert_info
+  when: _acme_lines | length > 1
+  vars:
+    _token_re: '"[^"]*"|\\S+'
+    _header_tokens: >-
+      {{
+        (_acme_lines[0] | regex_findall(_token_re))
+        | map('regex_replace', '^"(.*)"$', '\\1')
+        | list
+      }}
+    _idx_domain:  "{{ _header_tokens.index('Main_Domain') }}"
+    _idx_created: "{{ _header_tokens.index('Created') }}"
+    _idx_renew:   "{{ _header_tokens.index('Renew') }}"
+
+    _rows_tokens: >-
+      {{
+        _acme_lines[1:]
+        | map('regex_findall', _token_re)
+        | map('map', 'regex_replace', '^"(.*)"$', '\\1')
+        | list
+      }}
+
+    _kv_items: >-
+      {%- set out = [] -%}
+      {%- for row in _rows_tokens -%}
+      {%-   set d = row[_idx_domain] -%}
+      {%-   set created = row[_idx_created] -%}
+      {%-   set renew = row[_idx_renew] -%}
+      {%-   set days = ((renew | to_datetime('%Y-%m-%dT%H:%M:%SZ')) - (ansible_date_time.iso8601 | to_datetime)).days -%}
+      {%-   set _ = out.append({'key': d, 'value': {'created': created, 'renew': renew, 'days_remaining': days}}) -%}
+      {%- endfor -%}
+      {{ out }}
+  ansible.builtin.set_fact:
+    acme_cert_info: "{{ _kv_items | items2dict(key_name='key', value_name='value') }}"
+  tags: [list]
+
+- name: LIST — compute renewal urgency + emoji (optional)
+  ansible.builtin.set_fact:
+    acme_renew_status: >-
+      {{
+        acme_cert_info | dict2items
+        | map('combine', {
+            'urgency': (
+              'OK' if (item.value.days_remaining | int) > 30 else
+              'SOON' if (item.value.days_remaining | int) > 10 else
+              'URGENT'
+            ),
+            'emoji': (
+              '✅' if (item.value.days_remaining | int) > 30 else
+              '🟡' if (item.value.days_remaining | int) > 10 else
+              '🔴'
+            )
+          })
+        | items2dict(key='key', value='value')
+      }}
+  when:
+    - (acme_list_compute_status | default(true)) | bool
+    - acme_cert_info is defined
+  tags: [list]

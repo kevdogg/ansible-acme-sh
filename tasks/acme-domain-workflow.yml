@@ -1,5 +1,4 @@
 ---
----
 # ============================================================================
 # acme-domain-workflow.yml
 # ----------------------------------------------------------------------------
@@ -38,8 +37,6 @@
 # ======================================================================
 - name: Resolve relevant paths for this domain
   ansible.builtin.include_tasks: acme-resolve-rsa-vs-ecc-paths.yml
-  vars:
-    item: "{{ item }}"
 
 # ======================================================================
 # PRE-DEPLOY SNAPSHOT
@@ -106,7 +103,7 @@
   environment: "{{ item.dns_provider_api_keys | default(acme_sh_default_dns_provider_api_keys | default({})) }}"
   register: issue_result
   changed_when: >
-    issue_result.rc == 0 and (
+    (issue_result.rc == 0 | default(1)) and (
       "Cert success" in issue_result.stdout or
       "Renew" in issue_result.stdout or
       "Create new certificate" in issue_result.stdout
@@ -146,6 +143,23 @@
         )
       }}
 
+- name: Determine if acme.sh updated/issued a cert (issue or renew)
+  ansible.builtin.set_fact:
+    acme_cert_updated: >-
+      {{
+        (
+          (issue_result.rc | default(1)) == 0 and (
+            'Cert success' in (issue_result.stdout | default('')) or
+            'Renew' in (issue_result.stdout | default('')) or
+            'Create new certificate' in (issue_result.stdout | default(''))
+          )
+        )
+        or
+        (
+          (renew_result.rc | default(1)) == 0
+        )
+      }}
+
 # ======================================================================
 # PKCS#12 CREATION
 # ======================================================================
@@ -165,14 +179,33 @@
   register: pkcs_result
   failed_when: pkcs_result.rc != 0
   when:
-    - issue_result.rc == 0
-    - "'Cert success' in issue_result.stdout or 'Renew' in issue_result.stdout or 'Create new certificate' in issue_result.stdout"
+    - acme_cert_updated | default(false) | bool
   become: true
   become_user: "{{ acme_sh_become_user | default(omit) }}"
 
 # ======================================================================
 # DEPLOY CERTIFICATE
 # ======================================================================
+
+- name: Check localcopy deploy hook is present
+  ansible.builtin.stat:
+    path: "{{ acme_sh_directory_resolved }}/deploy/localcopy.sh"
+  register: _localcopy_hook
+  changed_when: false
+  become: true
+  become_user: "{{ acme_sh_become_user | default(omit) }}"
+
+- name: Ensure localcopy destination directory exists
+  ansible.builtin.file:
+    path: "{{ (acme_sh_copy_certs_to_path | default(acme_sh_default_copy_certs_to_path, true)) }}/{{ item.domains | first }}"
+    state: directory
+    mode: "0755"
+  become: true
+  become_user: "{{ acme_sh_become_user | default(omit) }}"
+  when:
+    - _localcopy_hook.stat.exists
+    - acme_cert_updated | default(false) | bool
+
 - name: Deploy acme.sh certificates
   vars:
     acme_exe: "{{ acme_sh_bin | default(acme_sh_default_bin, true) }}"
@@ -183,12 +216,12 @@
                   | regex_search('(^|\\s)--ecc(\\s|$)') else '' )
     }}
   environment:
-    DEPLOY_LOCALCOPY_CERTKEY: "{{ acme_sh_copy_certs_to_path }}/{{ item.domains | first }}/key.pem"
-    DEPLOY_LOCALCOPY_CERTIFICATE: "{{ acme_sh_copy_certs_to_path }}/{{ item.domains | first }}/cert.pem"
-    DEPLOY_LOCALCOPY_FULLCHAIN: "{{ acme_sh_copy_certs_to_path }}/{{ item.domains | first }}/fullchain.pem"
-    DEPLOY_LOCALCOPY_CA: "{{ acme_sh_copy_certs_to_path }}/{{ item.domains | first }}/ca.pem"
-    DEPLOY_LOCALCOPY_PFX: "{{ acme_sh_copy_certs_to_path }}/{{ item.domains | first }}/pkcs12.pfx"
-    DEPLOY_LOCALCOPY_RELOADCMD: "{{ item.install_cert_reloadcmd | default(acme_sh_default_install_cert_reloadcmd) | default('') }}"
+    DEPLOY_LOCALCOPY_CERTKEY: "{{ (acme_sh_copy_certs_to_path | default(acme_sh_default_copy_certs_to_path, true)) }}/{{ item.domains | first }}/key.pem"
+    DEPLOY_LOCALCOPY_CERTIFICATE: "{{ (acme_sh_copy_certs_to_path | default(acme_sh_default_copy_certs_to_path, true)) }}/{{ item.domains | first }}/cert.pem"
+    DEPLOY_LOCALCOPY_FULLCHAIN: "{{ (acme_sh_copy_certs_to_path | default(acme_sh_default_copy_certs_to_path, true)) }}/{{ item.domains | first }}/fullchain.pem"
+    DEPLOY_LOCALCOPY_CA: "{{ (acme_sh_copy_certs_to_path | default(acme_sh_default_copy_certs_to_path, true)) }}/{{ item.domains | first }}/ca.pem"
+    DEPLOY_LOCALCOPY_PFX: "{{ (acme_sh_copy_certs_to_path | default(acme_sh_default_copy_certs_to_path, true)) }}/{{ item.domains | first }}/pkcs12.pfx"
+    DEPLOY_LOCALCOPY_RELOADCMD: "{{ item.install_cert_reloadcmd | default(acme_sh_default_install_cert_reloadcmd, true) }}"  
   args:
     chdir: "{{ acme_sh_directory_resolved }}"
     executable: "{{ bash_executable_path | default('/bin/bash') }}"
@@ -197,26 +230,20 @@
   become: true
   become_user: "{{ acme_sh_become_user | default(omit) }}"
   when:
-    - issue_result.rc == 0
-    - pkcs_result.rc == 0
-    - "'Cert success' in issue_result.stdout or 'Renew' in issue_result.stdout or 'Create new certificate' in issue_result.stdout"
+    - _localcopy_hook.stat.exists
+    - (pkcs_result.rc | default(1)) == 0
+    - acme_cert_updated | default(false) | bool
+    
 
 # ======================================================================
 # POST-DEPLOY VALIDATION
 # ======================================================================
 - name: Record certificate validity after deploy
-  ansible.builtin.command: >
-    {{ acme_sh_bin }} --list
-  register: acme_post_list
-  changed_when: false
-  failed_when: false
-  become: true
-  become_user: "{{ acme_sh_become_user | default(omit) }}"
-
-- name: Parse acme.sh --list output (reuses hybrid parser)
-  ansible.builtin.include_tasks: acme-plan.yml
+  ansible.builtin.include_tasks: acme-parse-list.yml
   vars:
-    mode: "post"
+    acme_list_fail_on_error: false   # don’t fail entire domain if list hiccups
+    acme_list_compute_status: false  # you only need days_remaining
+  tags: [workflow]
 
 - name: Save post-deploy certificate info
   ansible.builtin.set_fact:
@@ -244,10 +271,10 @@
       }}
     reason_failed: >-
       {{
-        'issue'  if (issue_result.rc | default(0)) != 0 else
-        'renew'  if (renew_result.rc | default(0)) != 0 else
-        'pkcs12' if (pkcs_result.rc | default(0)) != 0 else
-        'deploy' if (deploy_result.rc | default(0)) != 0 else
+        'issue'  if (issue_result.rc | default(1)) != 0 else
+        'renew'  if (renew_result.rc | default(1)) != 0 else
+        'pkcs12' if (pkcs_result.rc | default(1)) != 0 else
+        'deploy' if (deploy_result.rc | default(1)) != 0 else
         omit
       }}
     acme_domain_result:
@@ -273,15 +300,24 @@
   ansible.builtin.set_fact:
     _planned_action: >-
       {{
-        acme_plan_summary[item.domains[0]].action
-        if acme_plan_summary is defined and acme_plan_summary[item.domains[0]] is defined
+        acme_plan_summary.domain_actions[item.domains[0]].action
+        if (
+          acme_plan_summary is defined and
+          acme_plan_summary.domain_actions is defined and
+          acme_plan_summary.domain_actions[item.domains[0]] is defined
+        )
         else 'UNKNOWN'
       }}
-    _actual_action: "{{ acme_domain_status | upper }}"
+    _actual_action: >-
+      {{
+        'INSTALL' if acme_domain_status in ['installed','skipped'] else
+        'FORCE_RENEW' if acme_domain_status == 'renewed' else
+        'FAILED' if acme_domain_status == 'failed' else
+        (acme_domain_status | upper)
+      }}
     _plan_match: "{{ _planned_action == _actual_action }}"
   when:
     - acme_domain_status is defined
-    - acme_plan_summary is defined
   tags: debug
 
 - name: Show per-domain planned vs actual summary

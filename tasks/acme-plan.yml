@@ -1,128 +1,23 @@
 ---
-# 1. Gather ACME cert info
-- name: PLAN — gather existing ACME cert info
-  ansible.builtin.command: >
-    {{ acme_sh_bin }} --list
-  register: acme_list_result
-  changed_when: false
-  failed_when: false
-  become: true
-  become_user: "{{ acme_sh_become_user }}"
-  tags: plan
+# ============================================================================
+# acme-plan.yml (NEW format only)
+# ----------------------------------------------------------------------------
+# Assumes acme.sh --list output like:
+# Main_Domain KeyLength SAN_Domains Profile CA Created Renew
+# ============================================================================
 
-# 2. Detect format (old pipe table vs new space-separated)
-- name: PLAN — detect acme.sh --list format
-  ansible.builtin.set_fact:
-    _acme_lines: "{{ acme_list_result.stdout_lines | reject('match', '^\\s*$') | list }}"
-    _is_pipe_format: "{{ _acme_lines | select('match', '^\\|') | list | length > 0 }}"
-  tags: plan
-
-# 3A. Parse NEW format (space-column style)
-- name: PLAN — parse NEW format (space-column)
-  when: not _is_pipe_format and _acme_lines | length > 1
+- name: PLAN — parse acme.sh list (host)
+  ansible.builtin.include_tasks: acme-parse-list.yml
   vars:
-    _rows_raw: "{{ _acme_lines[1:] }}"
-    _rows_split: >-
-      {{
-        _rows_raw
-        | map('regex_replace', '\\s+', ' ')
-        | map('trim')
-        | map('split', ' ')
-        | list
-      }}
-    _mapped: >-
-      {{
-        _rows_split
-        | map('extract', {0: 'domain', 4: 'created', 5: 'renew'})
-        | map('combine', {})
-        | map('combine', {
-            'days_remaining': (
-              ((item.renew | to_datetime) - (ansible_date_time.iso8601 | to_datetime)).days
-            )
-          })
-        | list
-      }}
-  ansible.builtin.set_fact:
-    acme_cert_info: >-
-      {{
-        dict(_mapped | map('community.general.dict_kv', 'key', 'domain', 'value', omit='') | list)
-      }}
-  tags: plan
-
-# 3B. Parse OLD format (pipe-table style)
-- name: PLAN — parse OLD format (pipe-table)
-  when: _is_pipe_format
-  vars:
-    _lines: >-
-      {{
-        _acme_lines
-        | select('match', '^\\|')
-        | map('regex_replace', '^\\|\\s*', '')
-        | map('regex_replace', '\\s*\\|$', '')
-        | map('split', '|')
-        | map('map', 'trim')
-        | list
-      }}
-    _header: "{{ _lines[0] | map('trim') | list }}"
-    _rows: "{{ _lines[1:] }}"
-    _domain_key: >-
-      {{
-        (_header | select('search', 'Main[ _]Domain') | list | first) | default('Main_Domain')
-      }}
-    _days_key: >-
-      {{
-        (_header | select('search', 'Days_remaining|Remaining Days') | list | first) | default('Days_remaining')
-      }}
-    _rowdicts: >-
-      {{
-        _rows
-        | map('zip', _header)
-        | map('items')
-        | map('dict')
-        | list
-      }}
-    _mapped: >-
-      {{
-        _rowdicts
-        | map('extract', {_domain_key: 'domain', _days_key: 'days_remaining'})
-        | map('combine', {})
-        | list
-      }}
-  ansible.builtin.set_fact:
-    acme_cert_info: >-
-      {{
-        dict(_mapped | map('community.general.dict_kv', 'key', 'domain', 'value', omit='') | list)
-      }}
-  tags: plan
-
-# 4. Compute urgency + emoji safely
-- name: PLAN — compute renewal urgency and emoji
-  ansible.builtin.set_fact:
-    acme_renew_status: >-
-      {{
-        acme_cert_info | dict2items
-        | map('combine', {
-            'urgency': (
-              'OK' if (item.value.days_remaining | int) > 30 else
-              'SOON' if (item.value.days_remaining | int) > 10 else
-              'URGENT'
-            ),
-            'emoji': (
-              '✅' if (item.value.days_remaining | int) > 30 else
-              '🟡' if (item.value.days_remaining | int) > 10 else
-              '🔴'
-            )
-          })
-        | items2dict(key='key', value='value')
-      }}
-  when: acme_cert_info is defined
+    acme_list_fail_on_error: true
+    acme_list_compute_status: true
   tags: plan
 
 # 5. Legend
 - name: PLAN — Legend
   ansible.builtin.debug:
     msg: |
-      ✅ Healthy (>30 days)
+      ✅ Renewal not needed (>30 days until next renew date)
       🟡 Renewal recommended (≤30 days)
       🔴 Renewal urgent (≤10 days)
       🆕 First issuance (no cert exists)
@@ -130,22 +25,23 @@
   run_once: true
   tags: plan
 
-# 6. INSTALL/RENEW entries
-- name: PLAN — INSTALL/RENEW domains
+# 6. INSTALL entries (includes "managed already" or "first issue")
+- name: PLAN — INSTALL domains
   ansible.builtin.debug:
     msg: |
       ▶ Domains: {{ item.domains | join(', ') }}
-         Action: INSTALL/RENEW
+         Action: INSTALL
          PKCS12 password: {{ item.acme_sh_pkcs12_password | default(acme_sh_default_pkcs12_password) }}
       {% if item.acme_sh_pkcs12_password is not defined %}
         ⚠️  Using default PKCS#12 password: '{{ acme_sh_default_pkcs12_password }}'
       {% endif %}
       {% set domain0 = item.domains[0] %}
       {% if acme_cert_info is defined and acme_cert_info[domain0] is defined %}
-         Expires in: {{ acme_cert_info[domain0].days_remaining }} days {{ acme_renew_status[domain0].emoji }}
+         Renew in: {{ acme_cert_info[domain0].days_remaining }} days {{ acme_renew_status[domain0].emoji }}
+         Next renew date: {{ acme_cert_info[domain0].renew }}
          Renewal urgency: {{ acme_renew_status[domain0].urgency }}
       {% else %}
-         Expires in: n/a 🆕
+         Status: n/a 🆕
          Renewal urgency: FIRST ISSUE
       {% endif %}
       {% if item.install_cert_reloadcmd is defined %}
@@ -154,7 +50,37 @@
   loop: "{{ acme_sh_domains }}"
   when:
     - acme_sh_domains | default([]) | length > 0
-    - not item.remove | default(false)
+    - not (item.remove | default(false))
+    - not (item.force_renew | default(false))
+  tags: plan
+
+# 6.1 FORCE_RENEW entries
+- name: PLAN — FORCE_RENEW domains
+  ansible.builtin.debug:
+    msg: |
+      ▶ Domains: {{ item.domains | join(', ') }}
+         Action: FORCE_RENEW
+         PKCS12 password: {{ item.acme_sh_pkcs12_password | default(acme_sh_default_pkcs12_password) }}
+      {% if item.acme_sh_pkcs12_password is not defined %}
+        ⚠️  Using default PKCS#12 password: '{{ acme_sh_default_pkcs12_password }}'
+      {% endif %}
+      {% set domain0 = item.domains[0] %}
+      {% if acme_cert_info is defined and acme_cert_info[domain0] is defined %}
+         Renew in: {{ acme_cert_info[domain0].days_remaining }} days {{ acme_renew_status[domain0].emoji }}
+         Next renew date: {{ acme_cert_info[domain0].renew }}
+         Renewal urgency: {{ acme_renew_status[domain0].urgency }}
+      {% else %}
+         Status: n/a 🆕
+         Renewal urgency: FIRST ISSUE
+      {% endif %}
+      {% if item.install_cert_reloadcmd is defined %}
+         Reload after renew: {{ item.install_cert_reloadcmd }}
+      {% endif %}
+  loop: "{{ acme_sh_domains }}"
+  when:
+    - acme_sh_domains | default([]) | length > 0
+    - not (item.remove | default(false))
+    - (item.force_renew | default(false))
   tags: plan
 
 # 7. REMOVE entries
@@ -166,39 +92,55 @@
          PKCS12 password: {{ item.acme_sh_pkcs12_password | default(acme_sh_default_pkcs12_password) }}
       {% set domain0 = item.domains[0] %}
       {% if acme_cert_info is defined and acme_cert_info[domain0] is defined %}
-         Remaining validity: {{ acme_cert_info[domain0].days_remaining }} days {{ acme_renew_status[domain0].emoji }}
+         Renew in: {{ acme_cert_info[domain0].days_remaining }} days {{ acme_renew_status[domain0].emoji }}
+         Next renew date: {{ acme_cert_info[domain0].renew }}
       {% else %}
-         Remaining validity: n/a 🆕
+         Status: n/a 🆕
       {% endif %}
   loop: "{{ acme_sh_domains }}"
   when:
     - acme_sh_domains | default([]) | length > 0
-    - item.remove | default(false)
+    - (item.remove | default(false))
   tags: plan
 
-# 8. PLAN — Export structured summary for comparison
-- name: PLAN — Export structured plan summary (domain + aggregate)
+# 8. Export structured plan summary (domain actions first)
+- name: PLAN — Export structured plan summary (domain actions)
   ansible.builtin.set_fact:
     acme_plan_summary:
       total: "{{ acme_sh_domains | length | default(0) }}"
-      installs: "{{ acme_sh_domains | rejectattr('remove', 'defined') | list | length }}"
-      renews: "{{ acme_sh_domains | selectattr('force_renew', 'defined') | selectattr('force_renew') | list | length }}"
-      removes: "{{ acme_sh_domains | selectattr('remove', 'defined') | selectattr('remove') | list | length }}"
       default_pw_count: "{{ acme_sh_domains | selectattr('acme_sh_pkcs12_password', 'undefined') | list | length }}"
       domains: "{{ acme_sh_domains | map(attribute='domains') | list | flatten }}"
       domain_actions: >-
-        {{
-          dict(acme_sh_domains
-            | map('community.general.dict_kv', 'key', 'domains.0',
-                  'value', {'action': ('REMOVE' if (item.remove | default(false)) else 'INSTALL')})
-            | list)
-        }}
+        {%- set m = {} -%}
+        {%- for d in (acme_sh_domains | default([])) -%}
+        {%-   set dom = d.domains[0] -%}
+        {%-   set act = (
+               'REMOVE' if (d.remove | default(false)) else
+               'FORCE_RENEW' if (d.force_renew | default(false)) else
+               'INSTALL'
+             ) -%}
+        {%-   set _ = m.update({ dom: {'action': act} }) -%}
+        {%- endfor -%}
+        {{ m }}
   when: acme_sh_domains is defined and acme_sh_domains | length > 0
   tags: plan
 
-# 9. PLAN — Compact visual summary
+# 8.1 Derive counts from domain_actions (no drift)
+- name: PLAN — Derive plan counts from domain_actions
+  ansible.builtin.set_fact:
+    acme_plan_summary: >-
+      {{
+        acme_plan_summary | combine({
+          'installs': (acme_plan_summary.domain_actions | dict2items | selectattr('value.action','equalto','INSTALL') | list | length),
+          'renews':   (acme_plan_summary.domain_actions | dict2items | selectattr('value.action','equalto','FORCE_RENEW') | list | length),
+          'removes':  (acme_plan_summary.domain_actions | dict2items | selectattr('value.action','equalto','REMOVE') | list | length)
+        }, recursive=True)
+      }}
+  when: acme_plan_summary is defined
+  tags: plan
+
+# 9. Compact visual summary
 - name: Include compact plan summary
   ansible.builtin.include_tasks: acme-plan-summary-compact.yml
   when: acme_sh_domains | default([]) | length > 0
   tags: plan
-

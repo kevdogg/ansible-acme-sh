@@ -37,6 +37,8 @@
     failed:    "{{ acme_summary.failed | default([]) }}"
     warnings:  "{{ acme_summary.warnings | default([]) }}"
     uninstalled: "{{ acme_summary.uninstalled | default([]) }}"
+    skipped_absent: "{{ (acme_summary.skipped | default([])) | selectattr('status','equalto','already_absent') | list }}"
+    skipped_other:  "{{ (acme_summary.skipped | default([])) | rejectattr('status','equalto','already_absent') | list }}"
   ansible.builtin.debug:
     msg: |
       ================================
@@ -45,8 +47,9 @@
 
       ✅ Installed: {{ installed | length }}
       🔁 Renewed:  {{ renewed | length }}
-      🗑️  Removed:  {{ removed | length }}
-      ⏭️  Skipped:  {{ skipped | length }}
+      🗑️ Removed:  {{ removed | length }}
+      ⏭️ Skipped:  {{ skipped_other | length }}
+      🧾 Already absent: {{ skipped_absent | length }}
       ❌ Failed:   {{ failed | length }}
       ⚠️  Warnings: {{ warnings | length }}
       🚫 Uninstalled: {{ 'Yes' if (uninstalled is defined and uninstalled | length > 0) else 'No' }}
@@ -75,6 +78,20 @@
       {% endif %}
       {% endif %}
 
+      {% if skipped_other %}
+      ⏭️ **Skipped**
+      {% for e in skipped_other %}
+        - {{ e.domain }}{% if e.message is defined %} → {{ e.message }}{% endif %}
+      {% endfor %}
+      {% endif %}
+      
+      {% if skipped_absent %}
+      🧾 **Already absent**
+      {% for e in skipped_absent %}
+        - {{ e.domain }}
+      {% endfor %}
+      {% endif %}
+
       {% if failed %}
       ❌ **Failed**
       {% for e in failed %}
@@ -101,6 +118,9 @@
 # ======================================================================
 - name: SUMMARY — removal overview (enriched)
   vars:
+    removed: "{{ acme_summary.removed | default([]) }}"
+    failed: "{{ acme_summary.failed | default([]) }}"
+    uninstalled: "{{ acme_summary.uninstalled | default([]) }}"
     removed_domains: >-
       {{
         removed | map(attribute='domain') | join(', ')
@@ -134,9 +154,9 @@
         )
       }}
   when:
-    - removed is defined or uninstalled is defined
+    - (acme_summary.removed | default([]) | length) > 0
+      or (acme_summary.uninstalled | default([]) | length) > 0
   tags: [summary, remove_all]
-
 
 # ======================================================================
 # PLAN vs ACTUAL DELTAS
