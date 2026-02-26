@@ -47,7 +47,7 @@
   become: true
   become_user: "{{ acme_sh_become_user }}"
   when: not _acme_uninstall
-  tags: [install_acme.sh, workflow, plan]
+  tags: [install, workflow, plan]
 
 ########################
 # PreTasks
@@ -55,7 +55,7 @@
 
 - name: Debug to show all ACME domain variables
   ansible.builtin.debug:
-    msg: "{{ item }}"
+    msg: "{{ item | default('No domain object') }}"
   loop: "{{ acme_sh_domains | default([]) }}"
   become_user: "{{ acme_sh_become_user }}"
   tags: [debug]
@@ -131,10 +131,8 @@
 # Developer / Diagnostic
 ############################
 
-- name: Run filter plugin test suite (developer debug only)
-  ansible.builtin.include_tasks: test-filters.yml
-  when: "'test-filters' in ansible_run_tags"
-  tags: [test-filters]
+# Removed — dev only
+# include_tasks: test-filters.yml
 
 ############################
 # Final Summary
@@ -142,5 +140,7 @@
 
 - name: Include final summary
   ansible.builtin.include_tasks: acme-summary-compact.yml
-  when: acme_summary is defined
+  when:
+    - acme_summary is defined
+    - "'plan' not in ansible_run_tags"
   tags: [summary]
