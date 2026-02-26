@@ -46,11 +46,11 @@
       ================================
 
       ✅ Installed: {{ installed | length }}
-      🔁 Renewed:  {{ renewed | length }}
-      🗑️ Removed:  {{ removed | length }}
-      ⏭️ Skipped:  {{ skipped_other | length }}
+      🔁 Renewed: {{ renewed | length }}
+      🗑️ Removed: {{ removed | length }}
+      ⏭️ Skipped: {{ skipped_other | length }}
       🧾 Already absent: {{ skipped_absent | length }}
-      ❌ Failed:   {{ failed | length }}
+      ❌ Failed: {{ failed | length }}
       ⚠️  Warnings: {{ warnings | length }}
       🚫 Uninstalled: {{ 'Yes' if (uninstalled is defined and uninstalled | length > 0) else 'No' }}
 
@@ -155,8 +155,16 @@
       }}
   when:
     - (acme_summary.removed | default([]) | length) > 0
+      or (acme_summary.failed | default([]) | length) > 0
       or (acme_summary.uninstalled | default([]) | length) > 0
-  tags: [summary, remove_all]
+    - ansible_run_tags is not defined
+      or 'all' in ansible_run_tags
+      or 'remove' in ansible_run_tags
+      or 'remove_all' in ansible_run_tags
+      or 'teardown' in ansible_run_tags
+      or 'summary' in ansible_run_tags
+      
+  tags: [summary]
 
 # ======================================================================
 # PLAN vs ACTUAL DELTAS
