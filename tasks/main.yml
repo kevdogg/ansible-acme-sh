@@ -55,6 +55,7 @@
   ansible.builtin.debug:
     msg: "{{ item | default('No domain object') }}"
   loop: "{{ acme_sh_domains | default([]) }}"
+  become: true
   become_user: "{{ acme_sh_become_user }}"
   tags: [debug]
 

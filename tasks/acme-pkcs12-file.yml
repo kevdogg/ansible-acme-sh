@@ -3,6 +3,7 @@
   ansible.builtin.stat:
     path: "{{ acme_sh_copy_certs_to_path }}/{{ item.domains | first }}/pkcs12.pfx"
   register: pkcs12_file_exists
+  become: true
   become_user: "{{ acme_sh_become_user }}"
 
 - name: Create a pkcs12.pfx file
@@ -16,6 +17,7 @@
     chdir: "{{ acme_sh_copy_certs_to_path }}/{{ item.domains | first }}"
   when:
     - not pkcs12_file_exists.stat.exists or pkcs12_file_exists.stat.exists
+  become: true
   become_user: "{{ acme_sh_become_user }}"
   register: pkcs12_create_result
 
@@ -25,4 +27,5 @@
   when:
     - (item.install_cert_reloadcmd is defined and item.install_cert_reloadcmd) or (acme_sh_default_install_cert_reloadcmd is defined and acme_sh_default_install_cert_reloadcmd)
     - pkcs12_create_result.rc == 0
+  become: true
   become_user: "{{ acme_sh_become_user }}"
