@@ -235,7 +235,6 @@
   register: acme_notify_result
   changed_when: acme_notify_result.rc == 0
   failed_when: acme_notify_result.rc != 0
-  tags: notify
 
 - name: Install {{ systemd_service_name }}.service
   ansible.builtin.template:
