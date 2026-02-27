@@ -44,6 +44,8 @@
 # - Do NOT tag it with "remove" (domain-remove still needs acme.sh present, but you can install if missing anyway)
 - name: Install acme.sh if not installed
   ansible.builtin.include_tasks: acme-install-acme-sh.yml
+    apply:
+      tags: [install, wokflow, plan]
   when: not _acme_uninstall
   tags: [install, workflow, plan]
 
