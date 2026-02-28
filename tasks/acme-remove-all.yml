@@ -118,9 +118,11 @@
   when: _acme_bin_stat.stat.exists | bool
 
 - name: Parse acme.sh --list
-  ansible.builtin.include_tasks: acme-parse-acme-list.yml
   vars:
     acme_list_lines: "{{ acme_list.stdout_lines | default([]) }}"
+  ansible.builtin.include_tasks: acme-parse-acme-list.yml
+    apply:
+      tags: [always, remove_all, teardown]
   when: _acme_bin_stat.stat.exists | bool
 
 - name: Build cert variants map from parser output
@@ -149,6 +151,8 @@
   loop_control:
     label: "{{ item.key }}"
   ansible.builtin.include_tasks: acme-domain-remove.yml
+    apply:
+      tags: [always, remove_all, teardown]
   vars:
     acme_domain: "{{ item.key }}"
     acme_is_ecc: "{{ item.value.is_ecc | default(false) | bool }}"

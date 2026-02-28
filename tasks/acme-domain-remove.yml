@@ -88,10 +88,12 @@
 
 # --- Resolve RSA/ECC paths ---
 - name: Resolve RSA/ECC paths before removal
-  ansible.builtin.include_tasks: acme-resolve-rsa-vs-ecc-paths.yml
   vars:
     acme_domain: "{{ _acme_domain }}"
     acme_is_ecc: "{{ _acme_is_ecc }}"
+  ansible.builtin.include_tasks: acme-resolve-rsa-vs-ecc-paths.yml
+    apply:
+      tags: [always, remove, remove_all, teardown]
   when: _acme_bin_stat_local.stat.exists | bool
 
 # --- Detect RSA + ECC internal directories ---
@@ -272,7 +274,9 @@
 
 - name: Snapshot scoreboard after domain removal (verbose mode only)
   ansible.builtin.include_tasks: debug-acme-scoreboard.yml
-  when: 
+    apply:
+      tags: [always, remove, remove_all, teardown]
+  when:
     - ansible_verbosity | int >= 2
     - _acme_bin_stat_local.stat.exists | bool
   tags: debug
