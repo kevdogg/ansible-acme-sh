@@ -36,7 +36,10 @@
 # PATH RESOLUTION (RSA/ECC)
 # ======================================================================
 - name: Resolve relevant paths for this domain
-  ansible.builtin.include_tasks: acme-resolve-rsa-vs-ecc-paths.yml
+  ansible.builtin.include_tasks:
+    file: acme-resolve-rsa-vs-ecc-paths.yml
+    apply:
+      tags: [always]
 
 # ======================================================================
 # PRE-DEPLOY SNAPSHOT
@@ -239,7 +242,10 @@
 # POST-DEPLOY VALIDATION
 # ======================================================================
 - name: Record certificate validity after deploy
-  ansible.builtin.include_tasks: acme-parse-list.yml
+  ansible.builtin.include_tasks:
+    file: acme-parse-list.yml
+    apply:
+      tags: [always]
   vars:
     acme_list_fail_on_error: false   # don’t fail entire domain if list hiccups
     acme_list_compute_status: false  # you only need days_remaining
@@ -365,7 +371,10 @@
 # OPTIONAL DEBUG SNAPSHOT
 # ======================================================================
 - name: Snapshot current scoreboard (verbose mode only)
-  ansible.builtin.include_tasks: debug-acme-scoreboard.yml
+  ansible.builtin.include_tasks:
+    file: debug-acme-scoreboard.yml
+    apply:
+      tags: [always]
   when: ansible_verbosity | int >= 2
   tags: debug
 

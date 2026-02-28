@@ -43,7 +43,8 @@
 # - Do NOT run this during full uninstall
 # - Do NOT tag it with "remove" (domain-remove still needs acme.sh present, but you can install if missing anyway)
 - name: Install acme.sh if not installed
-  ansible.builtin.include_tasks: acme-install-acme-sh.yml
+  ansible.builtin.include_tasks:
+    file: acme-install-acme-sh.yml
     apply:
       tags: [install, wokflow, plan]
   when: not _acme_uninstall
@@ -77,7 +78,10 @@
 ########################
 # If user runs --tags plan, this runs (and only then).
 - name: Generate ACME preflight plan
-  ansible.builtin.include_tasks: acme-plan.yml
+  ansible.builtin.include_tasks:
+    file: acme-plan.yml
+    apply:
+      tags: [plan]
   when:
     - not _acme_uninstall
     - "'plan' in ansible_run_tags"
@@ -88,7 +92,10 @@
 ########################
 
 - name: Obtain and install/renew acme.sh certificates
-  ansible.builtin.include_tasks: acme-domain-workflow.yml
+  ansible.builtin.include_tasks:
+    file: acme-domain-workflow.yml
+    apply:
+      tags: [workflow]
   loop: "{{ acme_sh_domains | default([]) }}"
   loop_control:
     label: "{{ item.domains[0] | default('UNKNOWN') }}"
@@ -106,7 +113,10 @@
 ############################
 
 - name: Process ACME domain removals
-  ansible.builtin.include_tasks: acme-domain-remove.yml
+  ansible.builtin.include_tasks:
+    file: acme-domain-remove.yml
+    apply:
+      tags: [remove]
   loop: "{{ acme_sh_domains | default([]) }}"
   loop_control:
     label: "{{ item.domains[0] | default('UNKNOWN') }}"
@@ -124,7 +134,10 @@
 ############################
 
 - name: 🧹 Full ACME teardown (remove all certs, services, and acme.sh)
-  ansible.builtin.include_tasks: acme-remove-all.yml
+  ansible.builtin.include_tasks:
+    file: acme-remove-all.yml
+    apply:
+      tags: [remove_all, teardown]
   when: _acme_uninstall
   tags: [remove_all, teardown]
 
@@ -140,7 +153,10 @@
 ############################
 
 - name: Include final summary
-  ansible.builtin.include_tasks: acme-summary-compact.yml
+  ansible.builtin.include_tasks:
+    file: acme-summary-compact.yml
+    apply:
+      tags: [summary]
   when:
     - acme_summary is defined
     - "'plan' not in ansible_run_tags"
