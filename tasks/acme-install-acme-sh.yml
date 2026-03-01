@@ -22,6 +22,11 @@
 # Tags: [acme, letsencrypt, automation, setup, systemd, notifications]
 # ============================================================================
 
+- name: Get home directory for the become_user
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ acme_sh_become_user }}"
+
 - name: Resolve acme.sh binary path
   ansible.builtin.set_fact:
     acme_sh_bin_resolved: >-
