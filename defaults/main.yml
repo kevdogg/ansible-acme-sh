@@ -104,6 +104,7 @@ acme_sh_default_bin: "{{ acme_sh_default_executable }}"
 
 acme_sh_default_install_directory_permissions: "0755"
 
+acme_sh_default_deploy_hook_localcopy: "localcopy"
 
 acme_sh_default_git_version: "master"
 acme_sh_default_git_url: "https://github.com/acmesh-official/acme.sh.git"
@@ -174,6 +175,7 @@ acme_sh_bin: "{{ acme_sh_default_bin }}"
 
 acme_sh_install_directory_permissions: "{{ acme_sh_default_install_directory_permissions }}"
 
+acme_sh_deploy_hook_localcopy: "{{ acme_sh_default_deploy_hook_localcopy }}"
 
 acme_sh_git_version: "{{ acme_sh_default_git_version }}"
 acme_sh_git_url: "{{ acme_sh_default_git_url }}"
