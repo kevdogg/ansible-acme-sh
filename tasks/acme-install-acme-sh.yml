@@ -215,29 +215,62 @@
   become: true
   become_user: "{{ acme_sh_become_user }}"
 
-- name: Enable acme.sh notification
-  vars:
-    acme_exe: "{{ acme_sh_bin | default(acme_sh_default_bin, true) }}"
-  ansible.builtin.shell: >-
-    {{
-      acme_exe ~ ' --set-notify' ~
-      ' --notify-level ' ~ (acme_sh_notify_level | default(acme_sh_default_notify_level | default('2'))) ~
-      ' --notify-mode ' ~ (acme_sh_notify_mode | default(acme_sh_default_notify_mode | default('0'))) ~
-      (acme_sh_notify_hooks | map('regex_replace', '^(.*)$', ' --notify-hook \\1') | join(''))
-    }}
-  args:
-    chdir: "{{ acme_sh_directory_resolved }}"
-    executable: "{{ bash_executable_path }}"
-  environment: "{{ acme_sh_notify_env_var }}"
-  when:
-    - acme_sh_enable_notify
-    - acme_sh_notify_hooks | length > 0
-    - acme_sh_notify_env_var.keys() | length > 0
+- name: Read acme.sh account configuration
+  ansible.builtin.slurp:
+    src: "{{ acme_sh_directory_resolved }}/account.conf"
+  register: _acme_account_conf
   become: true
   become_user: "{{ acme_sh_become_user }}"
-  register: acme_notify_result
-  changed_when: acme_notify_result.rc == 0
-  failed_when: acme_notify_result.rc != 0
+  # Use failed_when: false so the play doesn't die if the file isn't created yet
+  failed_when: false
+
+- name: Configure acme.sh notifications
+  vars:
+    acme_exe: "{{ acme_sh_bin }}"
+    hooks_string: "{{ acme_sh_notify_hooks | map('regex_replace', '^(.*)$', ' --notify-hook \\1') | join('') }}"
+  ansible.builtin.shell: >-
+    {{ acme_exe }} 
+    --set-notify 
+    --notify-level {{ acme_sh_notify_level | default('2') }}
+    --notify-mode {{ acme_sh_notify_mode | default('0') }}
+    {{ hooks_string }}
+  args:
+    chdir: "{{ acme_sh_directory_resolved }}"
+    executable: "/bin/bash"
+  environment: "{{ acme_sh_notify_env_var }}"
+  become: true
+  become_user: "{{ acme_sh_become_user }}"
+  # ROBUST CHECK: Run if file is missing OR if any hook is not yet configured
+  when: >-
+    - acme_sh_enable_notify
+    - _acme_account_conf.content is not defined or
+    (acme_sh_notify_hooks | select('reject', 'in', (_acme_account_conf.content | b64decode)) | list | length > 0)
+  register: _notify_result
+  changed_when: "'Success' in _notify_result.stdout"
+
+#- name: Enable acme.sh notification
+#  vars:
+#    acme_exe: "{{ acme_sh_bin | default(acme_sh_default_bin, true) }}"
+#  ansible.builtin.shell: >-
+#    {{
+#      acme_exe ~ ' --set-notify' ~
+#      ' --notify-level ' ~ (acme_sh_notify_level | default(acme_sh_default_notify_level | default('2'))) ~
+#      ' --notify-mode ' ~ (acme_sh_notify_mode | default(acme_sh_default_notify_mode | default('0'))) ~
+#      (acme_sh_notify_hooks | map('regex_replace', '^(.*)$', ' --notify-hook \\1') | join(''))
+#    }}
+#  args:
+#    chdir: "{{ acme_sh_directory_resolved }}"
+#    executable: "{{ bash_executable_path }}"
+#  environment: "{{ acme_sh_notify_env_var }}"
+#  when:
+#    - acme_sh_enable_notify
+#    - acme_sh_notify_hooks | length > 0
+#    - acme_sh_notify_env_var.keys() | length > 0
+#  become: true
+#  become_user: "{{ acme_sh_become_user }}"
+#  register: acme_notify_result
+#  changed_when: acme_notify_result.rc == 0
+#  failed_when: acme_notify_result.rc != 0
 
 - name: Install {{ systemd_service_name }}.service
   ansible.builtin.template:
