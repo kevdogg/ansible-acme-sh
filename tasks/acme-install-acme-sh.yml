@@ -111,23 +111,23 @@
         update: true
         force: "{{ acme_sh_git_clone_force | default(acme_sh_default_git_clone_force | default(false)) | bool }}"
 
-    - name: Run acme.sh installer (idempotent)
-      ansible.builtin.command: >
-        {{ (acme_sh_git_clone_dest | default(acme_sh_default_git_clone_dest | default(acme_sh_directory_resolved ~ '/src'))) }}/acme.sh
-        --install
-        --accountemail {{ acme_sh_account_email | default(acme_sh_default_account_email) }}
-        --home {{ acme_sh_directory_resolved }}
-        --nocron
-      args:
+    - name: Run acme.sh installer
+      ansible.builtin.command:
+        cmd: "./acme.sh --install --accountemail {{ acme_sh_account_email }} --home {{ acme_sh_directory_resolved }} --nocron"
+        chdir: "{{ acme_sh_git_clone_dest }}"
         creates: "{{ acme_sh_directory_resolved }}/acme.sh"
       register: _acme_install
       changed_when: _acme_install.rc == 0
+      become: true
+      become_user: "{{ acme_sh_become_user }}"
 
     - name: Ensure installed binary executable
       ansible.builtin.file:
         path: "{{ acme_sh_directory_resolved }}/acme.sh"
         state: file
         mode: "0755"
+      become: true
+      become_user: "{{ acme_sh_become_user }}"
 
     - name: Repoint acme_sh_bin to installed location
       ansible.builtin.set_fact:
