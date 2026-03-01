@@ -241,10 +241,10 @@
   become: true
   become_user: "{{ acme_sh_become_user }}"
   # ROBUST CHECK: Run if file is missing OR if any hook is not yet configured
-  when: >-
-    - acme_sh_enable_notify
-    - _acme_account_conf.content is not defined or
-    (acme_sh_notify_hooks | select('reject', 'in', (_acme_account_conf.content | b64decode)) | list | length > 0)
+  when:
+    - acme_sh_enable_notify | bool
+    - (_acme_account_conf.content is not defined) or
+      (acme_sh_notify_hooks | reject('in', (_acme_account_conf.content | default('') | b64decode)) | list | length > 0) | bool
   register: _notify_result
   changed_when: "'Success' in _notify_result.stdout"
 
