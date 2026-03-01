@@ -133,35 +133,9 @@
   ansible.builtin.set_fact:
     acme_live_cert_path_after: "{{ live_cert_after.stat.path | default(acme_sh_cert_path_resolved ~ '/fullchain.cer') }}"
     acme_live_cert_mtime_after: "{{ live_cert_after.stat.mtime | default(0) }}"
-    cert_was_renewed: >-
-      {{
-        (
-          (
-            "Cert success" in (issue_result.stdout | default('')) or
-            "Renew" in (issue_result.stdout | default('')) or
-            "Create new certificate" in (issue_result.stdout | default('')) or
-            (item.force_renew | default(false) | bool)
-          )
-          and (acme_live_cert_mtime_after | int) > (acme_live_cert_mtime_before | int)
-        )
-      }}
-
-- name: Determine if acme.sh updated/issued a cert (issue or renew)
-  ansible.builtin.set_fact:
-    acme_cert_updated: >-
-      {{
-        (
-          (issue_result.rc | default(1)) == 0 and (
-            'Cert success' in (issue_result.stdout | default('')) or
-            'Renew' in (issue_result.stdout | default('')) or
-            'Create new certificate' in (issue_result.stdout | default(''))
-          )
-        )
-        or
-        (
-          (renew_result.rc | default(1)) == 0
-        )
-      }}
+    acme_cert_updated: "{{ (acme_live_cert_mtime_after | int) > (acme_live_cert_mtime_before | int) }}"
+  become: true
+  become_user: "{{ acme_sh_become_user | default(omit) }}"
 
 # ======================================================================
 # PKCS#12 CREATION
@@ -269,7 +243,7 @@
             or (pkcs_result.rc | default(0)) != 0
             or (deploy_result.rc | default(0)) != 0
           ) else (
-            'renewed' if cert_was_renewed
+            'renewed' if acme_cert_updated
             else 'skipped' if ('Skip' in (issue_result.stdout | default('')))
             else 'installed'
           )

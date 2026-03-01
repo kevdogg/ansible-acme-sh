@@ -28,13 +28,15 @@
 # Safe to use inside loops (per-domain)
 # Expands "~" automatically and detects ECC vs RSA subfolder
 
-- name: Resolve acme.sh base directory (per host)
+- name: Resolve acme.sh base directory
   ansible.builtin.set_fact:
     acme_sh_directory_resolved: >-
       {{
         (acme_sh_directory | default(acme_sh_default_directory, true))
-        | expanduser
+        | regex_replace('^~', ansible_facts['getent_passwd'][acme_sh_become_user][4])
       }}
+  become: true
+  become_user: "{{ acme_sh_become_user }}"
 
 - name: Resolve acme.sh domain subdirectory (per domain)
   ansible.builtin.set_fact:
