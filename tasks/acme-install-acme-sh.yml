@@ -197,7 +197,7 @@
     chdir: "{{ acme_sh_directory_resolved }}"
     executable: "{{ bash_executable_path }}"
   when:
-    - not (is_acme_sh_installed.stat.exists | bool)
+#    - not (_acme_sh_bin_stat2.stat.exists | bool)
     - (acme_sh_server | default(acme_sh_default_server | default('letsencrypt'))) | length > 0
   become: true
   become_user: "{{ acme_sh_become_user }}"
