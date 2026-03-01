@@ -162,7 +162,7 @@
 - name: Check for existence of deploy hook localcopy
   ansible.builtin.stat:
     path: "{{ acme_sh_directory_resolved }}/deploy/{{ acme_sh_deploy_hook_localcopy | default(acme_sh_default_deploy_hook_localcopy, true) }}"
-    register: _localcopy_deploy_hook
+  register: _localcopy_deploy_hook
   become: true
   become_user: "{{ acme_sh_become_user }}"
   when:
