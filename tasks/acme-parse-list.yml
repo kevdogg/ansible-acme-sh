@@ -104,22 +104,25 @@
 - name: LIST — compute renewal urgency + emoji (optional)
   ansible.builtin.set_fact:
     acme_renew_status: >-
-      {{
-        acme_cert_info | dict2items
-        | map('combine', {
-            'urgency': (
-              'OK' if (item.value.days_remaining | int) > 30 else
-              'SOON' if (item.value.days_remaining | int) > 10 else
-              'URGENT'
-            ),
-            'emoji': (
-              '✅' if (item.value.days_remaining | int) > 30 else
-              '🟡' if (item.value.days_remaining | int) > 10 else
-              '🔴'
-            )
-          })
-        | items2dict(key='key', value='value')
-      }}
+      {%- set out = {} -%}
+      {%- for d, v in (acme_cert_info | default({})).items() -%}
+      {%-   set days = (v.days_remaining | int) -%}
+      {%-   set _ = out.update({
+            d: (v | combine({
+              'urgency': (
+                'OK' if days > 30 else
+                'SOON' if days > 10 else
+                'URGENT'
+              ),
+              'emoji': (
+                '✅' if days > 30 else
+                '🟡' if days > 10 else
+                '🔴'
+              )
+            }))
+          }) -%}
+      {%- endfor -%}
+      {{ out }}
   when:
     - (acme_list_compute_status | default(true)) | bool
     - acme_cert_info is defined
