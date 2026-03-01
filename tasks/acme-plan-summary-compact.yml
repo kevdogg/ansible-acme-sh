@@ -54,7 +54,7 @@
       Total domains in plan: {{ total_count }}
 
       {% if total_count | int == 0 %}
-      ⚠️  No domains to process.
+      🚧 No domains to process
       {% endif %}
 
       ────────────────────────────────
@@ -65,7 +65,7 @@
 
       {% if acme_sh_show_plan_deltas | default(true) and _unprocessed | length > 0 %}
       ────────────────────────────────
-      ⚠️  Planned but not processed (not yet in scoreboard):
+      🚧  Planned but not processed (not yet in scoreboard):
       {% for d in _unprocessed %}
         • {{ d }}
       {% endfor %}
@@ -76,8 +76,8 @@
         🟢 INSTALL
         🟡 FORCE_RENEW
         🔵 REMOVE
-        ⚠️  Default password in use ('pass')
-        🆕  No existing certificate
+        🚧 Default password in use ('pass')
+        ➕ No existing certificate
   when: acme_plan_summary is defined
   tags: plan
 
