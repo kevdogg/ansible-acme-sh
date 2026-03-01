@@ -272,10 +272,10 @@
 #  changed_when: acme_notify_result.rc == 0
 #  failed_when: acme_notify_result.rc != 0
 
-- name: Install {{ systemd_service_name }}.service
+- name: "Install {{ acme_sh_systemd_service_name | default(acme_sh_default_systemd_service_name, true) }}"
   ansible.builtin.template:
     src: acme_letsencrypt.service.j2
-    dest: "{{ acme_sh_systemd_service_path | default(acme_sh_default_systemd_service_path) }}"
+    dest: "{{ acme_sh_systemd_service_path | default(acme_sh_default_systemd_service_path, true) }}"
     force: true
     owner: root
     group: root
@@ -283,7 +283,7 @@
   become: true
   become_user: "{{ acme_sh_become_user }}"
 
-- name: Install {{ systemd_timer_name }}.timer
+- name: "Install {{ acme_sh_systemd_timer_name | default(acme_sh_default_systemd_timer_name, ture) }}"
   ansible.builtin.template:
     src: acme_letsencrypt.timer.j2
     dest: "{{ acme_sh_systemd_timer_path | default(acme_sh_default_systemd_timer_path) }}"

@@ -259,7 +259,7 @@ acme_sh_notify_hooks: ["mailgun"]
 acme_sh_notify_env_var:
   "MAILGUN_API_KEY": "{{ vault_mailgun_api_key }}"
   "MAILGUN_API_DOMAIN": "{{ vault_mailgun_api_domain }}"
-  "MAILGUN_FROM": "{{ 'acme-' + ansible_fqdn + '@' + vault_mailgun_api_domain }}"
+  "MAILGUN_FROM": "{{ 'acme-' + ansible_facts['fqdn'] + '@' + vault_mailgun_api_domain }}"
   "MAILGUN_TO": "{{ vault_mailgun_to }}"
   "MAILGUN_REGION": "{{ vault_mailgun_region }}"
 acme_sh_notify_level: 2
