@@ -1,5 +1,3 @@
----
-# ============================================================================
 # acme-install-acme-sh.yml
 # ----------------------------------------------------------------------------
 # Purpose:
@@ -24,22 +22,32 @@
 # Tags: [acme, letsencrypt, automation, setup, systemd, notifications]
 # ============================================================================
 
-# Resolve host-level paths
-- name: Resolve acme.sh base directory (host)
+- name: Resolve acme.sh binary path
   ansible.builtin.set_fact:
-    acme_sh_directory_resolved: >-
+    acme_sh_bin_resolved: >-
       {{
-        (acme_sh_directory | default(acme_sh_default_directory, true))
-        | expanduser
+        (acme_sh_bin | default(acme_sh_default_bin, true))
+        | regex_replace('^~', getent_passwd[acme_sh_become_user][4])
       }}
   become: true
   become_user: "{{ acme_sh_become_user }}"
 
-- name: Resolve acme.sh binary path (host)
+- name: Resolve acme.sh base directory
   ansible.builtin.set_fact:
-    acme_sh_bin: >-
+    acme_sh_directory_resolved: >-
       {{
-        acme_sh_bin | default(acme_sh_directory_resolved ~ '/acme.sh', true)
+        (acme_sh_directory | default(acme_sh_default_directory, true))
+        | regex_replace('^~', getent_passwd[acme_sh_become_user][4])
+      }}
+  become: true
+  become_user: "{{ acme_sh_become_user }}"
+
+- name: Resolve acme.sh binary path
+  ansible.builtin.set_fact:
+    acme_sh_bin_resolved: >-
+      {{
+        (acme_sh_bin | default(acme_sh_default_bin, true))
+        | regex_replace('^~', getent_passwd[acme_sh_become_user][4])
       }}
   become: true
   become_user: "{{ acme_sh_become_user }}"
