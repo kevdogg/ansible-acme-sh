@@ -46,7 +46,7 @@
   ansible.builtin.include_tasks:
     file: acme-install-acme-sh.yml
     apply:
-      tags: [install, wokflow, plan]
+      tags: [install, workflow, plan]
   when: not _acme_uninstall
   tags: [install, workflow, plan]
 
