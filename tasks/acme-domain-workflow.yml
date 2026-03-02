@@ -31,7 +31,15 @@
 
 # acme_domain_workflow.yml
 # Handle issuance or renewal for a single domain entry in acme_sh_domains
-
+# ======================================================================
+# ACME.SH PATH RESOLUTION (change ~/.acme.sh to {{ become_user }}_home_dir/.acme.sh)
+# ======================================================================
+- name: Resolve acme.sh paths
+  ansible.builtin.include_tasks:
+    file: acme-resolve-paths.yml
+    apply:
+      tags: [always]
+  tags: [always]
 # ======================================================================
 # PATH RESOLUTION (RSA/ECC)
 # ======================================================================
@@ -40,6 +48,7 @@
     file: acme-resolve-rsa-vs-ecc-paths.yml
     apply:
       tags: [always]
+    tags: [always]
 
 # ======================================================================
 # PRE-DEPLOY SNAPSHOT
@@ -64,25 +73,31 @@
 # ======================================================================
 # ISSUE / RENEW
 # ======================================================================
-- name: Force renew acme.sh certificate(s)
+- name: Force renew acme.sh certificate(s) if force option specified
   vars:
-    acme_exe: "{{ acme_sh_bin | default(acme_sh_default_bin, true) }}"
+    acme_exe: "{{ acme_sh_bin_resolved | default(acme_sh_bin | default(acme_sh_default_bin, true)) }}"
   ansible.builtin.shell: >-
     {{
       acme_exe ~ ' --renew -d ' ~ (item.domains | first) ~ ' --force' ~
       ( ' --debug' if item.debug | default(acme_sh_default_debug | default(false)) | bool else '' ) ~
-      ( ' --ecc' if (item.acme_sh_extra_flags_renew
-              | default(acme_sh_default_extra_flags_renew)
-              | default(''))
-              | regex_search('(^|\\s)--ecc(\\s|$)')
-        else '' )
+      ( ' ' ~ (
+          item.acme_sh_extra_flags_renew
+          | default(acme_sh_default_extra_flags_renew
+          | default(acme_sh_default_extra_flags, true), true)
+          | default('', true)
+        )
+      )
     }}
   args:
     chdir: "{{ acme_sh_directory_resolved }}"
     executable: "{{ bash_executable_path }}"
   register: renew_result
-  changed_when: renew_result.rc == 0
-  failed_when: renew_result.rc != 0 and "Reload error for" not in (renew_result.stderr | default(''))
+  changed_when: "{{ (renew_result.rc | default(1) | int) == 0 }}"
+  failed_when: >-
+    {{
+      (renew_result.rc | default(1) | int) not in [0, 2]
+      and ("Reload error for" not in (renew_result.stderr | default('')))
+    }}
   become: true
   become_user: "{{ acme_sh_become_user | default(omit) }}"
   when:
@@ -91,7 +106,7 @@
 
 - name: Issue acme.sh certificate(s) (this will sleep for dns_sleep seconds)
   vars:
-    acme_exe: "{{ acme_sh_bin | default(acme_sh_default_bin, true) }}"
+    acme_exe: "{{ acme_sh_bin_resolved | default(acme_sh_bin | default(acme_sh_default_bin, true)) }}"
   ansible.builtin.shell: >-
     {{
       acme_exe ~ ' --issue -d ' ~ (item.domains | join(' -d ')) ~
@@ -109,23 +124,42 @@
     executable: "{{ bash_executable_path }}"
   environment: "{{ item.dns_provider_api_keys | default(acme_sh_default_dns_provider_api_keys | default({})) }}"
   register: issue_result
-  changed_when: >
-    (issue_result.rc == 0 | default(1)) and (
-      "Cert success" in issue_result.stdout or
-      "Renew" in issue_result.stdout or
-      "Create new certificate" in issue_result.stdout
-    )
-  failed_when: issue_result.rc != 0
+  changed_when: >-
+    {{
+      (issue_result.rc | default(1) | int) == 0
+      and (
+        "Cert success" in (issue_result.stdout | default('')) or
+        "Renew" in (issue_result.stdout | default('')) or
+        "Create new certificate" in (issue_result.stdout | default(''))
+      )
+    }}
+  failed_when: "{{ (issue_result.rc | default(1) | int) not in [0, 2] }}"
   become: true
   become_user: "{{ acme_sh_become_user | default(omit) }}"
   when:
     - not item.force_renew | default(false) | bool
     - not item.custom_command | default(false) | bool
 
+- name: Mark certificate as already valid (no renewal needed) if certificate not due for renewal
+  ansible.builtin.set_fact:
+    acme_summary: >-
+      {{
+        acme_summary | combine({
+          'skipped': (acme_summary.skipped | default([])) + [{
+            'domain': (item.domains | first),
+            'status': 'already_valid',
+            'message': 'acme.sh reports next renewal time in future'
+          }]
+        }, recursive=True)
+      }}
+  when: (issue_result.rc | int) == 2
+  changed_when: true
+  tags: [summary]
+
 # ======================================================================
-# POST-DEPLOY SNAPSHOT
-# ======================================================================
-- name: Check updated certificate (after deploy)
+# POST-ISSUE SNAPSHOT
+# ============================================i==========================
+- name: Check updated certificate (after issue)
   ansible.builtin.stat:
     path: "{{ acme_sh_cert_path_resolved }}/fullchain.cer"
   register: live_cert_after
