@@ -103,6 +103,45 @@
   when:
     - item.force_renew | default(false) | bool
     - not item.custom_command | default(false) | bool
+  tags: [summary]
+
+- name: Record force renew outcome in scoreboard
+  ansible.builtin.set_fact:
+    acme_summary: >-
+      {{
+        acme_summary | combine({
+          'renewed': (
+            (acme_summary.renewed | default([])) + [{
+              'domain': (item.domains | first),
+              'forced': true
+            }]
+          ) if ((renew_result.rc | int) == 0) else (acme_summary.renewed | default([])),
+
+          'skipped': (
+            (acme_summary.skipped | default([])) + [{
+              'domain': (item.domains | first),
+              'status': 'already_valid',
+              'message': 'Force renew requested but acme.sh skipped (already valid)',
+              'forced': true
+            }]
+          ) if ((renew_result.rc | int) == 2) else (acme_summary.skipped | default([])),
+
+          'failed': (
+            (acme_summary.failed | default([])) + [{
+              'domain': (item.domains | first),
+              'message': 'Force renew failed',
+              'rc': (renew_result.rc | default('')),
+              'stdout': (renew_result.stdout | default('')),
+              'stderr': (renew_result.stderr | default('')),
+              'forced': true
+            }]
+          ) if ((renew_result.rc | default(1) | int) not in [0,2]) else (acme_summary.failed | default([]))
+        }, recursive=True)
+      }}
+  changed_when: true
+  when:
+    - item.force_renew | default(false) | bool
+    - renew_result is defined
 
 - name: Issue acme.sh certificate(s) (this will sleep for dns_sleep seconds)
   vars:
@@ -152,7 +191,10 @@
           }]
         }, recursive=True)
       }}
-  when: (issue_result.rc | int) == 2
+  when:
+    - not item.force_renew | default(false) | bool
+    - not item.custom_command | default(false) | bool
+    - (issue_result.rc | int) == 2
   changed_when: true
   tags: [summary]
 
