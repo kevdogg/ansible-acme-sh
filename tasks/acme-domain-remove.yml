@@ -116,15 +116,16 @@
 - name: Set variant existence flags
   ansible.builtin.set_fact:
     _has_rsa_variant: >-
-      {{ (_variant_dir_stat.results
-          | selectattr('item.name','equalto','RSA')
+      {{ (_variant_dir_stat.results 
+          | selectattr('candidate.name','equalto','RSA') 
           | map(attribute='stat.exists') | first) | default(false) }}
     _has_ecc_variant: >-
-      {{ (_variant_dir_stat.results
-          | selectattr('item.name','equalto','ECC')
+      {{ (_variant_dir_stat.results 
+          | selectattr('candidate.name','equalto','ECC') 
           | map(attribute='stat.exists') | first) | default(false) }}
-    _has_both_variants: "{{ (_has_rsa_variant | bool) and (_has_ecc_variant | bool) }}"
-  changed_when: false
+    # Calculate "both" by checking the results list directly instead of the variables above
+    _has_both_variants: >-
+      {{ (_variant_dir_stat.results | selectattr('stat.exists') | list | length) == 2 }}
   when: _acme_bin_stat_local.stat.exists | bool
 
 # --- Warn if both exist ---
