@@ -212,9 +212,11 @@
 
 - name: REMOVE — Internal certificate directories
   ansible.builtin.file:
-    path: "{{ item }}"
+    path: "{{ _dir_item }}"
     state: absent
   loop: "{{ _dirs_to_remove }}"
+  loop_control:
+    loop_var: _dir_item
   become: true
   become_user: "{{ acme_sh_become_user }}"
   when: _acme_bin_stat_local.stat.exists | bool

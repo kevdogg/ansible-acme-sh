@@ -38,11 +38,20 @@
 #  become: true
 #  become_user: "{{ acme_sh_become_user }}"
 
-- name: Resolve acme.sh base directory
-  ansible.builtin.set_fact:
-    acme_sh_directory_resolved: "{{ (acme_sh_directory | default(acme_sh_default_directory, true)) | expanduser }}"
+- name: Resolve become_user home directory via getent
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ acme_sh_become_user }}"
   become: true
   become_user: "{{ acme_sh_become_user }}"
+
+- name: Resolve acme.sh base directory
+  ansible.builtin.set_fact:
+    acme_sh_directory_resolved: >-
+      {{
+        (acme_sh_directory | default(acme_sh_default_directory, true))
+        | regex_replace('^~', ansible_facts['getent_passwd'][acme_sh_become_user][4])
+      }}
 
 - name: Resolve acme.sh domain subdirectory (per domain)
   ansible.builtin.set_fact:
