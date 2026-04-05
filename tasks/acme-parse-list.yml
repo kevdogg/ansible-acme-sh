@@ -21,7 +21,7 @@
   failed_when: false
   become: true
   become_user: "{{ acme_sh_become_user }}"
-  tags: [list]
+  tags: [list, plan]
 
 - name: LIST — fail if acme.sh did not run
   ansible.builtin.fail:
@@ -33,26 +33,26 @@
   when:
     - (acme_list_fail_on_error | default(true)) | bool
     - acme_list_result.rc != 0
-  tags: [list]
+  tags: [list, plan]
 
 - name: LIST — normalize acme.sh --list output
   ansible.builtin.set_fact:
     _acme_lines: "{{ acme_list_result.stdout_lines | map('trim') | reject('equalto', '') | list }}"
     #_acme_lines: "{{ acme_list_result.stdout_lines | reject('match', '^\\s*$') | list }}"
-  tags: [list]
+  tags: [list, plan]
 
 - name: LIST — set empty cert info when no certs exist
   ansible.builtin.set_fact:
     acme_cert_info: {}
     acme_renew_status: {}
   when: _acme_lines | length <= 1
-  tags: [list]
+  tags: [list, plan]
 
 - name: LIST — Parse header tokens
   when: _acme_lines | length > 1
   ansible.builtin.set_fact:
     _header_tokens: "{{ _acme_lines[0].split() | map('regex_replace', '^\"(.*)\"$', '\\1') | list }}"
-  tags: [list]
+  tags: [list, plan]
 
 #- name: Debug header line
 #  ansible.builtin.debug:
@@ -66,7 +66,7 @@
       - "'Created' in _header_tokens"
       - "'Renew' in _header_tokens"
     fail_msg: "acme.sh --list output missing required columns. Parsed header is: {{ _header_tokens }}"
-  tags: [list]
+  tags: [list, plan]
 
 #- name: LIST — verify required columns exist (NEW format)
 #  when: _acme_lines | length > 1
@@ -84,7 +84,7 @@
 #      - "'Created' in _header_tokens"
 #      - "'Renew' in _header_tokens"
 #    fail_msg: "acme.sh --list output missing required columns: {{ _header_tokens }}"
-#  tags: [list]
+#  tags: [list, plan]
 
 #- name: LIST — parse NEW format into acme_cert_info
 #  when: _acme_lines | length > 1
@@ -120,7 +120,7 @@
 #      {{ out }}
 #  ansible.builtin.set_fact:
 #    acme_cert_info: "{{ _kv_items | items2dict(key_name='key', value_name='value') }}"
-#  tags: [list]
+#  tags: [list, plan]
 
 - name: LIST — parse NEW format into acme_cert_info
   when: _acme_lines | length > 1
@@ -155,7 +155,7 @@
       {{ out }}
   ansible.builtin.set_fact:
     acme_cert_info: "{{ _kv_items | items2dict(key_name='key', value_name='value') }}"
-  tags: [list]
+  tags: [list, plan]
 
 - name: LIST — compute renewal urgency + emoji (optional)
   ansible.builtin.set_fact:
@@ -182,4 +182,4 @@
   when:
     - (acme_list_compute_status | default(true)) | bool
     - acme_cert_info is defined
-  tags: [list]
+  tags: [list, plan]
