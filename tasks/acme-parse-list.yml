@@ -133,41 +133,29 @@
 - name: LIST — parse NEW format into acme_cert_info
   when: _acme_lines | length > 1
   vars:
-    # This regex splits on ANY whitespace character (tabs, non-breaking spaces, etc.)
     _header_tokens: "{{ _acme_lines[0] | regex_findall('\\S+') | map('regex_replace', '^\"(.*)\"$', '\\1') | list }}"
-    
     _idx_domain:  "{{ _header_tokens.index('Main_Domain') }}"
-    _idx_created: "{{ _header_tokens.index('Created') }}"
     _idx_renew:   "{{ _header_tokens.index('Renew') }}"
-
-    # Split every data row using the same logic
     _rows_tokens: "{{ _acme_lines[1:] | map('regex_findall', '\\S+') | list }}"
 
-    _kv_items: >-
-      {%- set out = [] -%}
+    _parsed_dict: >-
+      {%- set certs = {} -%}
       {%- for row in _rows_tokens -%}
-        {# We check if the row has enough columns. acme.sh rows can vary if SAN is empty #}
         {%- if row | length >= 3 -%}
-          {%- set d = row[_idx_domain] | map('regex_replace', '^\"(.*)\"$', '\\1') | first | default(row[_idx_domain]) -%}
-          
-          {# Since SAN_Domains might be empty, we have to find 'Created' and 'Renew' from the END of the list #}
-          {# In acme.sh output, Renew is always the LAST column, Created is SECOND to last #}
+          {%- set d = row[_idx_domain] | regex_replace('^\"(.*)\"$', '\\1') -%}
           {%- set renew = row[-1] | regex_replace('^\"(.*)\"$', '\\1') -%}
           {%- set created = row[-2] | regex_replace('^\"(.*)\"$', '\\1') -%}
           
-          {# Match the ISO8601 format acme.sh uses (with T and Z) #}
           {%- set renew_dt = renew | to_datetime('%Y-%m-%dT%H:%M:%SZ') -%}
-
-          {# Ensure the comparison date is in a compatible format #}
           {%- set now_dt = ansible_facts['date_time']['iso8601'] | to_datetime('%Y-%m-%dT%H:%M:%SZ') -%}
           {%- set days = (renew_dt - now_dt).days -%}
           
-          {%- set _ = out.append({'key': d, 'value': {'created': created, 'renew': renew, 'days_remaining': days}}) -%}
+          {%- set _ = certs.update({ d: {'created': created, 'renew': renew, 'days_remaining': days} }) -%}
         {%- endif -%}
       {%- endfor -%}
-      {{ out }}
+      {{ certs }}
   ansible.builtin.set_fact:
-    acme_cert_info: "{{ _kv_items | items2dict(key_name='key', value_name='value') }}"
+    acme_cert_info: "{{ _parsed_dict | from_yaml }}"
   tags: [list, plan]
 
 - name: LIST — compute renewal urgency + emoji (optional)
