@@ -37,7 +37,8 @@
 
 - name: LIST — normalize acme.sh --list output
   ansible.builtin.set_fact:
-    _acme_lines: "{{ acme_list_result.stdout_lines | reject('match', '^\\s*$') | list }}"
+    _acme_lines: "{{ acme_list_result.stdout_lines | map('trim') | reject('equalto', '') | list }}"
+    #_acme_lines: "{{ acme_list_result.stdout_lines | reject('match', '^\\s*$') | list }}"
   tags: [list]
 
 - name: LIST — set empty cert info when no certs exist
@@ -47,16 +48,19 @@
   when: _acme_lines | length <= 1
   tags: [list]
 
-- name: LIST — verify required columns exist (NEW format)
+- name: LIST — Parse header tokens
   when: _acme_lines | length > 1
-  vars:
-    _token_re: '"[^"]*"|\\S+'
+  ansible.builtin.set_fact:
     _header_tokens: >-
       {{
-        (_acme_lines[0] | regex_findall(_token_re))
+        (_acme_lines[0] | regex_findall('"[^"]*"|\\S+'))
         | map('regex_replace', '^"(.*)"$', '\\1')
         | list
       }}
+  tags: [list]
+
+- name: LIST — verify required columns exist (NEW format)
+  when: _acme_lines | length > 1
   ansible.builtin.assert:
     that:
       - "'Main_Domain' in _header_tokens"
@@ -64,6 +68,24 @@
       - "'Renew' in _header_tokens"
     fail_msg: "acme.sh --list output missing required columns: {{ _header_tokens }}"
   tags: [list]
+
+#- name: LIST — verify required columns exist (NEW format)
+#  when: _acme_lines | length > 1
+#  vars:
+#    _token_re: '"[^"]*"|\\S+'
+#    _header_tokens: >-
+#      {{
+#        (_acme_lines[0] | regex_findall(_token_re))
+#        | map('regex_replace', '^"(.*)"$', '\\1')
+#        | list
+#      }}
+#  ansible.builtin.assert:
+#    that:
+#      - "'Main_Domain' in _header_tokens"
+#      - "'Created' in _header_tokens"
+#      - "'Renew' in _header_tokens"
+#    fail_msg: "acme.sh --list output missing required columns: {{ _header_tokens }}"
+#  tags: [list]
 
 - name: LIST — parse NEW format into acme_cert_info
   when: _acme_lines | length > 1
