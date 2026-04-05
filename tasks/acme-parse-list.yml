@@ -133,26 +133,28 @@
 - name: LIST — parse NEW format into acme_cert_info
   when: _acme_lines | length > 1
   vars:
-    # Use the split() method to get headers reliably
-    _header_tokens: "{{ _acme_lines[0].split() | map('regex_replace', '^\"(.*)\"$', '\\1') | list }}"
+    # This regex splits on ANY whitespace character (tabs, non-breaking spaces, etc.)
+    _header_tokens: "{{ _acme_lines[0] | regex_findall('\\S+') | map('regex_replace', '^\"(.*)\"$', '\\1') | list }}"
     
     _idx_domain:  "{{ _header_tokens.index('Main_Domain') }}"
     _idx_created: "{{ _header_tokens.index('Created') }}"
     _idx_renew:   "{{ _header_tokens.index('Renew') }}"
 
-    # Use split() for every data row as well
-    _rows_tokens: "{{ _acme_lines[1:] | map('split') | list }}"
+    # Split every data row using the same logic
+    _rows_tokens: "{{ _acme_lines[1:] | map('regex_findall', '\\S+') | list }}"
 
     _kv_items: >-
       {%- set out = [] -%}
       {%- for row in _rows_tokens -%}
-        {%- if row | length > _idx_renew -%}
-          {# Clean the quotes from the specific tokens #}
-          {%- set d = row[_idx_domain] | regex_replace('^\"(.*)\"$', '\\1') -%}
-          {%- set created = row[_idx_created] | regex_replace('^\"(.*)\"$', '\\1') -%}
-          {%- set renew = row[_idx_renew] | regex_replace('^\"(.*)\"$', '\\1') -%}
+        {# We check if the row has enough columns. acme.sh rows can vary if SAN is empty #}
+        {%- if row | length >= 3 -%}
+          {%- set d = row[_idx_domain] | map('regex_replace', '^\"(.*)\"$', '\\1') | first | default(row[_idx_domain]) -%}
           
-          {# Calculate days remaining #}
+          {# Since SAN_Domains might be empty, we have to find 'Created' and 'Renew' from the END of the list #}
+          {# In acme.sh output, Renew is always the LAST column, Created is SECOND to last #}
+          {%- set renew = row[-1] | regex_replace('^\"(.*)\"$', '\\1') -%}
+          {%- set created = row[-2] | regex_replace('^\"(.*)\"$', '\\1') -%}
+          
           {%- set renew_dt = renew | to_datetime('%Y-%m-%dT%H:%M:%SZ') -%}
           {%- set now_dt = ansible_facts['date_time']['iso8601'] | to_datetime -%}
           {%- set days = (renew_dt - now_dt).days -%}
