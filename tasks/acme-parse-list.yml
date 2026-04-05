@@ -51,17 +51,12 @@
 - name: LIST — Parse header tokens
   when: _acme_lines | length > 1
   ansible.builtin.set_fact:
-    _header_tokens: >-
-      {{
-        (_acme_lines[0] | regex_findall('"[^"]*"|\\S+'))
-        | map('regex_replace', '^"(.*)"$', '\\1')
-        | list
-      }}
+    _header_tokens: "{{ _acme_lines[0].split() | map('regex_replace', '^\"(.*)\"$', '\\1') | list }}"
   tags: [list]
 
-- name: Debug header line
-  ansible.builtin.debug:
-    msg: "Raw Header: '{{ _acme_lines[0] }}'"
+#- name: Debug header line
+#  ansible.builtin.debug:
+#    msg: "Raw Header: '{{ _acme_lines[0] }}'"
 
 - name: LIST — verify required columns exist (NEW format)
   when: _acme_lines | length > 1
@@ -70,7 +65,7 @@
       - "'Main_Domain' in _header_tokens"
       - "'Created' in _header_tokens"
       - "'Renew' in _header_tokens"
-    fail_msg: "acme.sh --list output missing required columns: {{ _header_tokens }}"
+    fail_msg: "acme.sh --list output missing required columns. Parsed header is: {{ _header_tokens }}"
   tags: [list]
 
 #- name: LIST — verify required columns exist (NEW format)
