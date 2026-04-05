@@ -46,7 +46,10 @@
     msg: 
       - "RAW STDOUT: |{{ acme_list_result.stdout }}|"
       - "NORMALIZED LINE COUNT: {{ _acme_lines | length }}"
-      - "ALL LINES: {{ _acme_lines | enumerate | list }}"
+      - "ALL LINES WITH INDEX:"
+      {% for line in _acme_lines %}
+      - "Index {{ loop.index0 }}: '{{ line }}'"
+      {% endfor %}
   tags: [list, plan, debug]
 
 - name: LIST — set empty cert info when no certs exist
