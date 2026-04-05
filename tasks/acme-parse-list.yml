@@ -136,21 +136,25 @@
     _header_tokens: "{{ _acme_lines[0] | regex_findall('\\S+') | map('regex_replace', '^\"(.*)\"$', '\\1') | list }}"
     _idx_domain:  "{{ _header_tokens.index('Main_Domain') }}"
     _idx_renew:   "{{ _header_tokens.index('Renew') }}"
+    _idx_created: "{{ _header_tokens.index('Created') }}"
     _rows_tokens: "{{ _acme_lines[1:] | map('regex_findall', '\\S+') | list }}"
 
     _parsed_dict: >-
       {%- set certs = {} -%}
       {%- for row in _rows_tokens -%}
-        {%- if row | length >= 3 -%}
+        {# 1. Check if the row actually has enough columns to reach the 'Renew' index #}
+        {%- if row | length > _idx_renew -%}
           {%- set d = row[_idx_domain] | regex_replace('^\"(.*)\"$', '\\1') -%}
-          {%- set renew = row[-1] | regex_replace('^\"(.*)\"$', '\\1') -%}
-          {%- set created = row[-2] | regex_replace('^\"(.*)\"$', '\\1') -%}
+          {%- set renew = row[_idx_renew] | regex_replace('^\"(.*)\"$', '\\1') -%}
+          {%- set created = row[_idx_created] | regex_replace('^\"(.*)\"$', '\\1') -%}
           
-          {%- set renew_dt = renew | to_datetime('%Y-%m-%dT%H:%M:%SZ') -%}
-          {%- set now_dt = ansible_facts['date_time']['iso8601'] | to_datetime('%Y-%m-%dT%H:%M:%SZ') -%}
-          {%- set days = (renew_dt - now_dt).days -%}
-          
-          {%- set _ = certs.update({ d: {'created': created, 'renew': renew, 'days_remaining': days} }) -%}
+          {# 2. The CRITICAL SAFETY: Only parse if 'renew' actually looks like a date string #}
+          {%- if 'T' in renew and 'Z' in renew -%}
+            {%- set renew_dt = renew | to_datetime('%Y-%m-%dT%H:%M:%SZ') -%}
+            {%- set now_dt = ansible_facts['date_time']['iso8601'] | to_datetime('%Y-%m-%dT%H:%M:%SZ') -%}
+            {%- set days = (renew_dt - now_dt).days -%}
+            {%- set _ = certs.update({ d: {'created': created, 'renew': renew, 'days_remaining': days} }) -%}
+          {%- endif -%}
         {%- endif -%}
       {%- endfor -%}
       {{ certs }}
