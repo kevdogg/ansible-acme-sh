@@ -59,6 +59,10 @@
       }}
   tags: [list]
 
+- name: Debug header line
+  ansible.builtin.debug:
+    msg: "Raw Header: '{{ _acme_lines[0] }}'"
+
 - name: LIST — verify required columns exist (NEW format)
   when: _acme_lines | length > 1
   ansible.builtin.assert:
