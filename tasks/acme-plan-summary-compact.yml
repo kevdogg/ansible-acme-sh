@@ -21,14 +21,15 @@
 # Tags: [acme, letsencrypt, plan, preflight, summary]
 # ============================================================================
 
-
 - name: PLAN SUMMARY — Compact preflight table
   vars:
     cat_icons:
       INSTALL:     "🟢"
+      MANAGE:      "🟣"
       FORCE_RENEW: "🟡"
-      REMOVE:      "🔵"
+      REMOVE:      "🔴"
     install_count: "{{ acme_plan_summary.installs | default(0) }}"
+    manage_count: "{{ acme_plan_summary.managed | default(0) }}"
     force_renew_count: "{{ acme_plan_summary.renews | default(0) }}"
     remove_count: "{{ acme_plan_summary.removes | default(0) }}"
     total_count: "{{ acme_plan_summary.total | default(0) }}"
@@ -47,8 +48,9 @@
       📊 **Planned Actions**
       ────────────────────────────────
       🟢 {{ install_count }} install(s)
+      🟣 {{ manage_count }} manage existing cert(s)
       🟡 {{ force_renew_count }} force renew(s)
-      🔵 {{ remove_count }} remove(s)
+      🔴 {{ remove_count }} remove(s)
       🚧 {{ default_pw_count }} using default PKCS#12 password
       ────────────────────────────────
       Total domains in plan: {{ total_count }}
@@ -74,10 +76,10 @@
       ────────────────────────────────
       Legend:
         🟢 INSTALL
+        🟣 MANAGE
         🟡 FORCE_RENEW
-        🔵 REMOVE
+        🔴 REMOVE
         🚧 Default password in use ('pass')
         ➕ No existing certificate
   when: acme_plan_summary is defined
   tags: plan
-
