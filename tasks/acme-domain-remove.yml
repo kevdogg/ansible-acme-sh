@@ -129,7 +129,7 @@
 
 # --- Warn if both exist ---
 - name: Warn if both RSA and ECC directories exist for this domain
-  ansible.builtin.warn:
+  ansible.builtin.debug:
     msg: >-
       Both RSA and ECC certificate directories exist for {{ _acme_domain }}.
       Resolved removal target: {{ acme_sh_cert_path_resolved }}.
