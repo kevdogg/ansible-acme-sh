@@ -41,6 +41,14 @@
     #_acme_lines: "{{ acme_list_result.stdout_lines | reject('match', '^\\s*$') | list }}"
   tags: [list, plan]
 
+- name: DEBUG — Inspect EVERY line and raw output
+  ansible.builtin.debug:
+    msg: 
+      - "RAW STDOUT: |{{ acme_list_result.stdout }}|"
+      - "NORMALIZED LINE COUNT: {{ _acme_lines | length }}"
+      - "ALL LINES: {{ _acme_lines | enumerate | list }}"
+  tags: [list, plan, debug]
+
 - name: LIST — set empty cert info when no certs exist
   ansible.builtin.set_fact:
     acme_cert_info: {}
