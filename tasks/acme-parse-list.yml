@@ -155,7 +155,7 @@
       {%- endfor -%}
       {{ certs }}
   ansible.builtin.set_fact:
-    acme_cert_info: "{{ _parsed_dict | from_yaml }}"
+    acme_cert_info: "{{ _parsed_dict }}"
   tags: [list, plan]
 
 - name: LIST — compute renewal urgency + emoji (optional)
