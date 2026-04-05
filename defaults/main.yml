@@ -155,6 +155,7 @@ acme_sh_default_uninstall: false
 # Domain Removal
 acme_sh_default_remove: false
 acme_sh_default_remove_all_variants: false
+acme_sh_default_deployed_certs: false
 
 # Full uninstall
 acme_sh_default_remove_deployed_certs_on_uninstall: false
@@ -223,6 +224,7 @@ acme_sh_uninstall: "{{ acme_sh_default_uninstall }}"
 # Domain Removal
 acme_sh_remove: "{{ acme_sh_default_remove }}"
 acme_sh_remove_all_variants: "{{ acme_sh_default_remove_all_variants }}"
+acme_sh_remove_deployed_certs: "{{ acme_sh_default_remove_deployed_certs }}"
 
 # Full uninstall
 acme_sh_remove_deployed_certs_on_uninstall: "{{ acme_sh_default_remove_deployed_certs_on_uninstall }}"

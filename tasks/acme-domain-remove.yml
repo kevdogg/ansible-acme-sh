@@ -125,7 +125,9 @@
           | map(attribute='stat.exists') | first) | default(false) }}
     # Calculate "both" by checking the results list directly instead of the variables above
     _has_both_variants: >-
-      {{ (_variant_dir_stat.results | selectattr('stat.exists') | list | length) == 2 }}
+      {{ (_variant_dir_stat.results | selectattr('stat.exists', 'equalto', true) | list | length) == 2 }}
+  become: true
+  become_user: "{{ acme_sh_become_user }}"
   when: _acme_bin_stat_local.stat.exists | bool
 
 # --- Warn if both exist ---
@@ -170,44 +172,52 @@
   become_user: "{{ acme_sh_become_user }}"
   when: _acme_bin_stat_local.stat.exists | bool
 
-- name: Classify removal outcome (removed vs already_absent vs failed)
+- name: REMOVE — Capture return codes from acme.sh commands
   ansible.builtin.set_fact:
-    _remove_rcs: "{{ (acme_remove_cmds.results | default([])) | map(attribute='rc') | list }}"
-    _removed_now: "{{ (_remove_rcs | select('equalto', 0) | list | length) > 0 }}"
-    _already_absent: "{{ (not _removed_now) and ((_remove_rcs | select('equalto', 2) | list | length) > 0) }}"
-    _remove_failed: "{{ (not _removed_now) and (not _already_absent) }}"
-  changed_when: false
-  when:
+    _remove_rcs: "{{ acme_remove_cmds.results | map(attribute='rc') | list }}"
+  become: true
+  become_user: "{{ acme_sh_become_user }}"
+  when: 
     - _acme_bin_stat_local.stat.exists | bool
-    - acme_remove_cmds is defined
+    - acme_remove_cmds.results is defined
+
+- name: REMOVE — Classify removal outcome
+  ansible.builtin.set_fact:
+    # At least one 0 means success
+    _removed_now: "{{ 0 in _remove_rcs }}"
+    
+    # No 0s, but at least one 2 means it was already gone
+    _already_absent: "{{ (0 not in _remove_rcs) and (2 in _remove_rcs) }}"
+    
+    # Neither 0 nor 2 means something actually broke (e.g., RC 1)
+    _remove_failed: "{{ (0 not in _remove_rcs) and (2 not in _remove_rcs) }}"
+  become: true
+  become_user: "{{ acme_sh_become_user }}"
+  when: 
+    - _acme_bin_stat_local.stat.exists | bool
+    - _remove_rcs is defined
+
 
 # STEP 2 — Remove internal certificate directories
-- name: Remove BOTH RSA and ECC internal cert directories (optional)
-  ansible.builtin.file:
-    path: "{{ candidate.path }}"
-    state: absent
-  loop:
-    - { name: "RSA", path: "{{ acme_sh_directory_resolved }}/{{ _acme_domain }}" }
-    - { name: "ECC", path: "{{ acme_sh_directory_resolved }}/{{ _acme_domain }}_ecc" }
-  loop_control:
-    loop_var: candidate
-    label: "{{ candidate.name }}"
-  when:
-    - _has_both_variants | bool
-    - _acme_remove_all_variants | bool
-    - _acme_bin_stat_local.stat.exists | bool
-  become: true
-  become_user: "{{ acme_sh_become_user }}"
+- name: Resolve directories for deletion
+  ansible.builtin.set_fact:
+    _dirs_to_remove: >-
+      {{
+        [
+          acme_sh_directory_resolved ~ '/' ~ _acme_domain,
+          acme_sh_directory_resolved ~ '/' ~ _acme_domain ~ '_ecc'
+        ] if (_has_both_variants | bool and _acme_remove_all_variants | bool)
+        else [ acme_sh_cert_path_resolved ]
+      }}
 
-- name: Remove resolved internal certificate directory (default)
+- name: REMOVE — Internal certificate directories
   ansible.builtin.file:
-    path: "{{ acme_sh_cert_path_resolved }}"
+    path: "{{ item }}"
     state: absent
-  when:
-    - not (_has_both_variants | bool and _acme_remove_all_variants | bool)
-    - _acme_bin_stat_local.stat.exists | bool
+  loop: "{{ _dirs_to_remove }}"
   become: true
   become_user: "{{ acme_sh_become_user }}"
+  when: _acme_bin_stat_local.stat.exists | bool
 
 # STEP 3 — Remove deployed cert copies
 - name: Remove deployed certificate directory if it exists
@@ -218,44 +228,31 @@
   failed_when: false
   when:
     - _acme_bin_stat_local.stat.exists | bool
+    - - item.acme_sh_remove_deployed_certs | default(acme_sh_default_remove_deployed_certs, true) | bool
   
 # STEP 4 — Record result
-- name: Record domain removal result
+
+- name: RECORD — Prepare removal result entry
+  ansible.builtin.set_fact:
+    _removal_entry:
+      domain: "{{ _acme_domain }}"
+      removed_all: "{{ _acme_remove_all_variants | bool }}"
+      variants_found: "{{ 'Both' if _has_both_variants else ('ECC' if _acme_is_ecc else 'RSA') }}"
+      rcs: "{{ _remove_rcs | default([]) }}"
+
+- name: RECORD — Update acme_summary scoreboard
   ansible.builtin.set_fact:
     acme_summary: >-
       {{
-        acme_summary
-        | combine({
-            'removed': (
-              (acme_summary.removed | default([])) + [{
-                'domain': _acme_domain,
-                'removed_all_variants': _acme_remove_all_variants
-              }]
-            ) if (_removed_now | bool) else (acme_summary.removed | default([])),
-
-            'skipped': (
-              (acme_summary.skipped | default([])) + [{
-                'domain': _acme_domain,
-                'status': 'already_absent',
-                'message': 'Domain not found in acme.sh; nothing to remove',
-                'removed_all_variants': _acme_remove_all_variants
-              }]
-            ) if (_already_absent | bool) else (acme_summary.skipped | default([])),
-
-            'failed': (
-              (acme_summary.failed | default([])) + [{
-                'domain': _acme_domain,
-                'message': 'acme.sh --remove failed',
-                'rcs': (_remove_rcs | default([])),
-                'removed_all_variants': _acme_remove_all_variants
-              }]
-            ) if (_remove_failed | bool) else (acme_summary.failed | default([]))
-          }, recursive=True)
+        acme_summary | default({'removed': [], 'skipped': [], 'failed': []}, true) | combine({
+          'removed': (acme_summary.removed | default([]) + [_removal_entry]) if _removed_now else acme_summary.removed | default([]),
+          'skipped': (acme_summary.skipped | default([]) + [_removal_entry | combine({'status': 'already_absent'})]) if _already_absent else acme_summary.skipped | default([]),
+          'failed':  (acme_summary.failed | default([])  + [_removal_entry | combine({'message': 'acme.sh remove failed'})]) if _remove_failed else acme_summary.failed | default([])
+        }, recursive=True)
       }}
-  changed_when: true
-  when:
+  when: 
     - _acme_bin_stat_local.stat.exists | bool
-    - acme_remove_cmds is defined
+    - _remove_rcs is defined
 
 # STEP 5 — Feedback
 - name: Show per-domain removal result
