@@ -128,15 +128,18 @@
   when: _acme_bin_stat_local.stat.exists | bool
 
 # --- Warn if both exist ---
-- name: Warn if both RSA and ECC directories exist for this domain
+- name: "⚠️ WARNING: Multiple Certificate Variants Found"
   ansible.builtin.debug:
-    msg: >-
-      Both RSA and ECC certificate directories exist for {{ _acme_domain }}.
-      Resolved removal target: {{ acme_sh_cert_path_resolved }}.
-      remove_all_variants={{ _acme_remove_all_variants }}.
+    msg: 
+      - "----------------------------------------------------------------"
+      - "WARNING: Both RSA and ECC directories exist for {{ _acme_domain }}."
+      - "Resolved removal target: {{ acme_sh_cert_path_resolved }}."
+      - "remove_all_variants: {{ _acme_remove_all_variants }}."
+      - "----------------------------------------------------------------"
   when:
     - _has_both_variants | bool
     - _acme_bin_stat_local.stat.exists | bool
+  tags: [remove, cert, debug]
 
 # STEP 1 — Stop tracking with acme.sh
 - name: Remove domain from acme.sh tracking (best effort)
