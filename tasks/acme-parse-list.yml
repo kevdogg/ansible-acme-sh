@@ -86,36 +86,71 @@
 #    fail_msg: "acme.sh --list output missing required columns: {{ _header_tokens }}"
 #  tags: [list]
 
+#- name: LIST — parse NEW format into acme_cert_info
+#  when: _acme_lines | length > 1
+#  vars:
+#    _token_re: '"[^"]*"|\\S+'
+#    _header_tokens: >-
+#      {{
+#        (_acme_lines[0] | regex_findall(_token_re))
+#        | map('regex_replace', '^"(.*)"$', '\\1')
+#        | list
+#      }}
+#    _idx_domain:  "{{ _header_tokens.index('Main_Domain') }}"
+#    _idx_created: "{{ _header_tokens.index('Created') }}"
+#    _idx_renew:   "{{ _header_tokens.index('Renew') }}"
+#
+#    _rows_tokens: >-
+#      {{
+#        _acme_lines[1:]
+#        | map('regex_findall', _token_re)
+#        | map('map', 'regex_replace', '^"(.*)"$', '\\1')
+#        | list
+#      }}
+#
+#    _kv_items: >-
+#      {%- set out = [] -%}
+#      {%- for row in _rows_tokens -%}
+#      {%-   set d = row[_idx_domain] -%}
+#      {%-   set created = row[_idx_created] -%}
+#      {%-   set renew = row[_idx_renew] -%}
+#      {%-   set days = ((renew | to_datetime('%Y-%m-%dT%H:%M:%SZ')) - (ansible_date_time.iso8601 | to_datetime)).days -%}
+#      {%-   set _ = out.append({'key': d, 'value': {'created': created, 'renew': renew, 'days_remaining': days}}) -%}
+#      {%- endfor -%}
+#      {{ out }}
+#  ansible.builtin.set_fact:
+#    acme_cert_info: "{{ _kv_items | items2dict(key_name='key', value_name='value') }}"
+#  tags: [list]
+
 - name: LIST — parse NEW format into acme_cert_info
   when: _acme_lines | length > 1
   vars:
-    _token_re: '"[^"]*"|\\S+'
-    _header_tokens: >-
-      {{
-        (_acme_lines[0] | regex_findall(_token_re))
-        | map('regex_replace', '^"(.*)"$', '\\1')
-        | list
-      }}
+    # Use the split() method to get headers reliably
+    _header_tokens: "{{ _acme_lines[0].split() | map('regex_replace', '^\"(.*)\"$', '\\1') | list }}"
+    
     _idx_domain:  "{{ _header_tokens.index('Main_Domain') }}"
     _idx_created: "{{ _header_tokens.index('Created') }}"
     _idx_renew:   "{{ _header_tokens.index('Renew') }}"
 
-    _rows_tokens: >-
-      {{
-        _acme_lines[1:]
-        | map('regex_findall', _token_re)
-        | map('map', 'regex_replace', '^"(.*)"$', '\\1')
-        | list
-      }}
+    # Use split() for every data row as well
+    _rows_tokens: "{{ _acme_lines[1:] | map('split') | list }}"
 
     _kv_items: >-
       {%- set out = [] -%}
       {%- for row in _rows_tokens -%}
-      {%-   set d = row[_idx_domain] -%}
-      {%-   set created = row[_idx_created] -%}
-      {%-   set renew = row[_idx_renew] -%}
-      {%-   set days = ((renew | to_datetime('%Y-%m-%dT%H:%M:%SZ')) - (ansible_date_time.iso8601 | to_datetime)).days -%}
-      {%-   set _ = out.append({'key': d, 'value': {'created': created, 'renew': renew, 'days_remaining': days}}) -%}
+        {%- if row | length > _idx_renew -%}
+          {# Clean the quotes from the specific tokens #}
+          {%- set d = row[_idx_domain] | regex_replace('^\"(.*)\"$', '\\1') -%}
+          {%- set created = row[_idx_created] | regex_replace('^\"(.*)\"$', '\\1') -%}
+          {%- set renew = row[_idx_renew] | regex_replace('^\"(.*)\"$', '\\1') -%}
+          
+          {# Calculate days remaining #}
+          {%- set renew_dt = renew | to_datetime('%Y-%m-%dT%H:%M:%SZ') -%}
+          {%- set now_dt = ansible_facts['date_time']['iso8601'] | to_datetime -%}
+          {%- set days = (renew_dt - now_dt).days -%}
+          
+          {%- set _ = out.append({'key': d, 'value': {'created': created, 'renew': renew, 'days_remaining': days}}) -%}
+        {%- endif -%}
       {%- endfor -%}
       {{ out }}
   ansible.builtin.set_fact:
