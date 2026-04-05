@@ -164,11 +164,12 @@
   environment: "{{ item.dns_provider_api_keys | default(acme_sh_default_dns_provider_api_keys | default({})) }}"
   register: issue_result
   changed_when: >-
-    - issue_result.rc | default(1) | int == 0
-    - >
+    (issue_result.rc | default(1) | int == 0) and
+    (
       "Cert success" in (issue_result.stdout | default('')) or
-      "Renew" in (issue_result.stdout | default('')) or
+      "Renew" in (issue_result.stdout | default('')) or 
       "Create new certificate" in (issue_result.stdout | default(''))
+    )
   failed_when: (issue_result.rc | default(1) | int) not in [0, 2]
   become: true
   become_user: "{{ acme_sh_become_user | default(omit) }}"
