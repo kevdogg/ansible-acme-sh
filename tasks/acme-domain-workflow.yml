@@ -165,7 +165,7 @@
   register: issue_result
   changed_when: >-
     - issue_result.rc | default(1) | int == 0
-    - >-
+    - >
       "Cert success" in (issue_result.stdout | default('')) or
       "Renew" in (issue_result.stdout | default('')) or
       "Create new certificate" in (issue_result.stdout | default(''))
