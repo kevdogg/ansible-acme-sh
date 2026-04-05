@@ -230,7 +230,7 @@
   failed_when: false
   when:
     - _acme_bin_stat_local.stat.exists | bool
-    - - item.acme_sh_remove_deployed_certs | default(acme_sh_default_remove_deployed_certs, true) | bool
+    - item.acme_sh_remove_deployed_certs | default(acme_sh_default_remove_deployed_certs, true) | bool
   
 # STEP 4 — Record result
 
