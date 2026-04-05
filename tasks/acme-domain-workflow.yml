@@ -48,7 +48,7 @@
     file: acme-resolve-rsa-vs-ecc-paths.yml
     apply:
       tags: [always]
-    tags: [always]
+  tags: [always]
 
 # ======================================================================
 # PRE-DEPLOY SNAPSHOT
