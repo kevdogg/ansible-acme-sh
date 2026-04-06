@@ -109,6 +109,14 @@
       {{ certs }}
   tags: [list, plan]
 
+- name: 🔍 THE TRUTH DEBUG
+  ansible.builtin.debug:
+    msg:
+      - "Full acme_cert_info: {{ acme_cert_info }}"
+      - "First Raw Line: {{ _acme_lines[1] | default('EMPTY') }}"
+      - "Tokens in First Line: {{ (_acme_lines[1] | default('')).split() }}"
+  tags: [always]
+
 - name: LIST — compute renewal urgency + emoji (optional)
   ansible.builtin.set_fact:
     acme_renew_status: >-
