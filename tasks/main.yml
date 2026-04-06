@@ -87,6 +87,10 @@
     - "'plan' in ansible_run_tags"
   tags: [plan]
 
+# Gather existing certificate data prior to processing
+- name: BASELINE — Gather existing certificate dates
+  ansible.builtin.include_tasks: acme-parse-list.yml
+  tags: [always, list]
 ########################
 # Issue / Renew Phase
 ########################
