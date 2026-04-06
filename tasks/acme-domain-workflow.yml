@@ -461,20 +461,20 @@
 # ======================================================================
 # APPEND TO GLOBAL SCOREBOARD
 # ======================================================================
+
 - name: Append result to scoreboard buckets
   ansible.builtin.set_fact:
     acme_summary: >-
       {{
-        acme_summary
-        | combine({
+        acme_summary | combine({
             'installed': (acme_summary.installed + [acme_domain_result])
-                          if acme_domain_status == 'installed' else acme_summary.installed,
+                          if (acme_domain_status == 'installed' and acme_domain_result not in acme_summary.installed) else acme_summary.installed,
             'renewed':   (acme_summary.renewed   + [acme_domain_result])
-                          if acme_domain_status == 'renewed' else acme_summary.renewed,
+                          if (acme_domain_status == 'renewed' and acme_domain_result not in acme_summary.renewed) else acme_summary.renewed,
             'skipped':   (acme_summary.skipped   + [acme_domain_result])
-                          if acme_domain_status == 'skipped' else acme_summary.skipped,
+                          if (acme_domain_status == 'skipped' and acme_domain_result not in acme_summary.skipped) else acme_summary.skipped,
             'failed':    (acme_summary.failed    + [acme_domain_result])
-                          if acme_domain_status == 'failed' else acme_summary.failed
+                          if (acme_domain_status == 'failed' and acme_domain_result not in acme_summary.failed) else acme_summary.failed
           }, recursive=True)
       }}
   when: acme_domain_status is defined
@@ -483,6 +483,7 @@
 # ======================================================================
 # OPTIONAL DEBUG SNAPSHOT
 # ======================================================================
+
 - name: Snapshot current scoreboard (verbose mode only)
   ansible.builtin.include_tasks:
     file: debug-acme-scoreboard.yml
