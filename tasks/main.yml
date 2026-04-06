@@ -89,7 +89,10 @@
 
 # Gather existing certificate data prior to processing
 - name: BASELINE — Gather existing certificate dates
-  ansible.builtin.include_tasks: acme-parse-list.yml
+  ansible.builtin.include_tasks:
+    file: acme-parse-list.yml
+    apply:
+      tags: [always]
   tags: [always, list]
 ########################
 # Issue / Renew Phase
