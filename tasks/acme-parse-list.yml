@@ -80,23 +80,29 @@
 
 - name: LIST — parse NEW format into acme_cert_info
   when: _acme_lines | length > 1
-  # Move the logic OUT of vars and INTO the set_fact directly
   ansible.builtin.set_fact:
     acme_cert_info: >-
       {%- set _header_tokens = _acme_lines[0] | regex_findall('\\S+') | map('regex_replace', '^\"(.*)\"$', '\\1') | list -%}
       {%- set _idx_domain = _header_tokens.index('Main_Domain') -%}
+      {%- set _idx_renew = _header_tokens.index('Renew') -%}
+      {%- set _idx_created = _header_tokens.index('Created') -%}
       {%- set certs = {} -%}
       {%- for row_raw in _acme_lines[1:] -%}
         {%- set row = row_raw | regex_findall('\\S+') -%}
-        {%- if row | length >= 5 -%}
+        {# 1. SAFETY: Does the row have enough columns to reach our target indexes? #}
+        {%- if row | length > _idx_renew and row | length > _idx_created -%}
           {%- set d = row[_idx_domain] | regex_replace('^\"(.*)\"$', '\\1') -%}
-          {%- set renew = row[-1] | regex_replace('^\"(.*)\"$', '\\1') -%}
-          {%- set created = row[-2] | regex_replace('^\"(.*)\"$', '\\1') -%}
+          {%- set renew = row[_idx_renew] | regex_replace('^\"(.*)\"$', '\\1') -%}
+          {%- set created = row[_idx_created] | regex_replace('^\"(.*)\"$', '\\1') -%}
+          {# 2. VALIDATION: Does the column actually contain a date string? #}
           {%- if 'T' in renew and 'Z' in renew -%}
             {%- set renew_dt = renew | to_datetime('%Y-%m-%dT%H:%M:%SZ') -%}
             {%- set now_dt = now(utc=true).strftime('%Y-%m-%dT%H:%M:%SZ') | to_datetime('%Y-%m-%dT%H:%M:%SZ') -%}
             {%- set days = (renew_dt - now_dt).days -%}
             {%- set _ = certs.update({ d: {'created': created, 'renew': renew, 'days_remaining': days} }) -%}
+          {%- else -%}
+            {# 3. FALLBACK: Record the domain but flag the missing data #}
+            {%- set _ = certs.update({ d: {'created': 'N/A', 'renew': 'N/A', 'days_remaining': '?'} }) -%}
           {%- endif -%}
         {%- endif -%}
       {%- endfor -%}
