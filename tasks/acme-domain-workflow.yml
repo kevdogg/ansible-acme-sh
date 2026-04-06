@@ -78,32 +78,43 @@
     acme_exe: "{{ acme_sh_bin_resolved | default(acme_sh_bin | default(acme_sh_default_bin, true)) }}"
   ansible.builtin.shell: >-
     {{
-      acme_exe ~ ' --renew -d ' ~ (item.domains | first) ~ ' --force' ~
+      acme_exe ~ ' --issue -d ' ~ (item.domains | join(' -d ')) ~
+      ' --dns ' ~ (item.dns_provider | default(acme_sh_default_dns_provider | default('dns_cf'))) ~
+      ' --dnssleep ' ~ (item.dns_sleep | default(acme_sh_default_dns_sleep | default('30')) | string) ~
+      ( ' --force' if (item.force_issue | default(acme_sh_default_force_issue | default(false)) | bool)
+                     or (item.force_renew | default(acme_sh_default_force_renew | default(false)) | bool)
+        else '' ) ~
+      ( ' --staging' if item.staging | default(acme_sh_default_staging | default(false)) | bool else '' ) ~
       ( ' --debug' if item.debug | default(acme_sh_default_debug | default(false)) | bool else '' ) ~
-      ( ' ' ~ (
-          item.acme_sh_extra_flags_renew
-          | default(acme_sh_default_extra_flags_renew
-          | default(acme_sh_default_extra_flags, true), true)
-          | default('', true)
-        )
-      )
+      ( ' ' ~ (item.acme_sh_extra_flags_issue | default(acme_sh_default_extra_flags_issue | default('--keylength ec-384 --ecc'))) )
+
+
+#      acme_exe ~ ' --renew -d ' ~ (item.domains | first) ~ ' --force' ~
+#      ( ' --debug' if item.debug | default(acme_sh_default_debug | default(false)) | bool else '' ) ~
+#      ( ' ' ~ (
+#          item.acme_sh_extra_flags_renew
+#          | default(acme_sh_default_extra_flags_renew
+#          | default(acme_sh_default_extra_flags, true), true)
+#          | default('', true)
+#        )
+#      )
     }}
   args:
     chdir: "{{ acme_sh_directory_resolved }}"
     executable: "{{ bash_executable_path }}"
+  environment: "{{ item.dns_provider_api_keys | default(acme_sh_default_dns_provider_api_keys | default({})) }}"
   register: renew_result
-  changed_when: "{{ (renew_result.rc | default(1) | int) == 0 }}"
+  changed_when: >-
+    - renew_result.rc | default(1) | int == 0
+    - 'renew_result.stdout is search("Cert success|Renew|Create new certificate")'
   failed_when: >-
-    {{
       (renew_result.rc | default(1) | int) not in [0, 2]
-      and ("Reload error for" not in (renew_result.stderr | default('')))
-    }}
+#      and ("Reload error for" not in (renew_result.stderr | default('')))
   become: true
   become_user: "{{ acme_sh_become_user | default(omit) }}"
   when:
     - item.force_renew | default(false) | bool
     - not item.custom_command | default(false) | bool
-  tags: [summary]
 
 - name: Record force renew outcome in scoreboard
   ansible.builtin.set_fact:
@@ -113,15 +124,17 @@
           'renewed': (
             (acme_summary.renewed | default([])) + [{
               'domain': (item.domains | first),
-              'forced': true
+              'sans': (item.domains[1:] | join(', ') if item.domains | length > 1 else 'None'),
+              'forced': true,
+              'msg': 'Certificate issued successfully'
             }]
           ) if ((renew_result.rc | int) == 0) else (acme_summary.renewed | default([])),
 
           'skipped': (
             (acme_summary.skipped | default([])) + [{
               'domain': (item.domains | first),
-              'status': 'already_valid',
-              'message': 'Force renew requested but acme.sh skipped (already valid)',
+              'status': 'no change; already_valid',
+              'message': 'acme.sh returned RC 2 - No new certificate was issued. SAN expansion may have failed if force was not used.',
               'forced': true
             }]
           ) if ((renew_result.rc | int) == 2) else (acme_summary.skipped | default([])),
