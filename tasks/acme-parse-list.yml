@@ -80,25 +80,18 @@
 
 - name: LIST — parse NEW format into acme_cert_info
   when: _acme_lines | length > 1
-  vars:
-    _header_tokens: "{{ _acme_lines[0] | regex_findall('\\S+') | map('regex_replace', '^\"(.*)\"$', '\\1') | list }}"
-    _idx_domain:  "{{ _header_tokens.index('Main_Domain') }}"
-    _idx_renew:   "{{ _header_tokens.index('Renew') }}"
-    _idx_created: "{{ _header_tokens.index('Created') }}"
-    _rows_tokens: "{{ _acme_lines[1:] | map('regex_findall', '\\S+') | list }}"
-
-    _parsed_dict: >-
+  # Move the logic OUT of vars and INTO the set_fact directly
+  ansible.builtin.set_fact:
+    acme_cert_info: >-
+      {%- set _header_tokens = _acme_lines[0] | regex_findall('\\S+') | map('regex_replace', '^\"(.*)\"$', '\\1') | list -%}
+      {%- set _idx_domain = _header_tokens.index('Main_Domain') -%}
       {%- set certs = {} -%}
-      {%- for row in _rows_tokens -%}
-        {# 1. Check if the row actually has enough columns to reach the 'Renew' index #}
+      {%- for row_raw in _acme_lines[1:] -%}
+        {%- set row = row_raw | regex_findall('\\S+') -%}
         {%- if row | length >= 5 -%}
           {%- set d = row[_idx_domain] | regex_replace('^\"(.*)\"$', '\\1') -%}
-          
-          {# Use the known index for the domain, but use relative positions for the dates #}
           {%- set renew = row[-1] | regex_replace('^\"(.*)\"$', '\\1') -%}
           {%- set created = row[-2] | regex_replace('^\"(.*)\"$', '\\1') -%}
-
-          {# 2. The CRITICAL SAFETY: Only parse if 'renew' actually looks like a date string #}
           {%- if 'T' in renew and 'Z' in renew -%}
             {%- set renew_dt = renew | to_datetime('%Y-%m-%dT%H:%M:%SZ') -%}
             {%- set now_dt = now(utc=true).strftime('%Y-%m-%dT%H:%M:%SZ') | to_datetime('%Y-%m-%dT%H:%M:%SZ') -%}
@@ -108,8 +101,6 @@
         {%- endif -%}
       {%- endfor -%}
       {{ certs }}
-  ansible.builtin.set_fact:
-    acme_cert_info: "{{ _parsed_dict }}"
   tags: [list, plan]
 
 - name: LIST — compute renewal urgency + emoji (optional)
