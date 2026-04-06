@@ -47,6 +47,8 @@
       - "RAW STDOUT: |{{ acme_list_result.stdout }}|"
       - "NORMALIZED LINE COUNT: {{ _acme_lines | length }}"
       - "ALL LINES: {{ _acme_lines }}"
+  when:
+    - acme_list_result is defined
   tags: [list, plan, debug]
 
 - name: LIST — set empty cert info when no certs exist
