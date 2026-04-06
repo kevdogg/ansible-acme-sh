@@ -336,14 +336,6 @@
         )
       }}
 
-    # Add a specific sub-status for your 'Already absent' logic
-    _acme_sub_status: >-
-      {{
-        'already_absent' if 'already absent' in (issue_result.stdout | default('') | lower)
-        else 'normal'
-      }}
-  tags: [always]
-
     # 2. Reason: Only set this if we are actually in a 'failed' state
     _reason_failed_temp: >-
       {{
@@ -354,6 +346,14 @@
         'deploy' if (deploy_result.rc | default(0)) != 0 else
         omit
       }}
+
+    # 3. Add a specific sub-status for your 'Already absent' logic
+    _acme_sub_status: >-
+      {{
+        'already_absent' if 'already absent' in (issue_result.stdout | default('') | lower)
+        else 'normal'
+      }}
+
   when: issue_result is defined or renew_result is defined
   tags: [always]
 
