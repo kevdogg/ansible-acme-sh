@@ -87,17 +87,6 @@
       ( ' --staging' if item.staging | default(acme_sh_default_staging | default(false)) | bool else '' ) ~
       ( ' --debug' if item.debug | default(acme_sh_default_debug | default(false)) | bool else '' ) ~
       ( ' ' ~ (item.acme_sh_extra_flags_issue | default(acme_sh_default_extra_flags_issue | default('--keylength ec-384 --ecc'))) )
-
-
-#      acme_exe ~ ' --renew -d ' ~ (item.domains | first) ~ ' --force' ~
-#      ( ' --debug' if item.debug | default(acme_sh_default_debug | default(false)) | bool else '' ) ~
-#      ( ' ' ~ (
-#          item.acme_sh_extra_flags_renew
-#          | default(acme_sh_default_extra_flags_renew
-#          | default(acme_sh_default_extra_flags, true), true)
-#          | default('', true)
-#        )
-#      )
     }}
   args:
     chdir: "{{ acme_sh_directory_resolved }}"
