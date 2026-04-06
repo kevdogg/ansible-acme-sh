@@ -2,24 +2,23 @@
 - name: 🧩 Debug — ACME scoreboard snapshot (colorized)
   ansible.builtin.debug:
     msg: |
-      {% set color_reset = '\033[0m' %}
-      {% set color_green = '\033[0;32m' %}
+      {% set color_reset  = '\033[0m' %}
+      {% set color_green  = '\033[0;32m' %}
       {% set color_yellow = '\033[0;33m' %}
-      {% set color_red = '\033[0;31m' %}
-      {% set color_cyan = '\033[0;36m' %}
-      {% set color_gray = '\033[0;37m' %}
+      {% set color_red    = '\033[0;31m' %}
+      {% set color_cyan   = '\033[0;36m' %}
+      {% set color_gray   = '\033[0;37m' %}
 
       {% if acme_summary is not defined %}
       ⚠️  {{ color_yellow }}No scoreboard data yet — no domains have been processed.{{ color_reset }}
       {% else %}
       {{ color_cyan }}📋 Current ACME summary for {{ inventory_hostname }}{{ color_reset }}
       ─────────────────────────────────────────────
-      {{ color_green }}✅ Installed:{{ color_reset }} {% for d in acme_summary.installed | default([]) %}{{ d.domain }} {% endfor %}
-      {{ color_yellow }}🔁 Renewed:  {{ color_reset }}{% for d in acme_summary.renewed | default([]) %}{{ d.domain }} {% endfor %}
-      {{ color_gray }}⏸️ Skipped:  {{ color_reset }}{% for d in acme_summary.skipped | default([]) %}{{ d.domain }} {% endfor %}
-      {{ color_cyan }}🗑️ Removed:  {{ color_reset }}{% for d in acme_summary.removed | default([]) %}{{ d.domain }} {% endfor %}
-      {{ color_red }}❌ Failed:   {{ color_reset }}{% for d in acme_summary.failed | default([]) %}{{ d.domain }} {% endfor %}
+      {{ color_green }}✅ Installed:{{ color_reset }} {{ acme_summary.installed | map(attribute='domain') | join(', ') }}
+      {{ color_yellow }}🔁 Renewed:   {{ color_reset }} {{ acme_summary.renewed   | map(attribute='domain') | join(', ') }}
+      {{ color_gray }}⏸️  Skipped:   {{ color_reset }} {{ acme_summary.skipped   | map(attribute='domain') | join(', ') }}
+      {{ color_cyan }}🗑️  Removed:   {{ color_reset }} {{ acme_summary.removed   | map(attribute='domain') | join(', ') }}
+      {{ color_red }}❌ Failed:    {{ color_reset }} {{ acme_summary.failed    | map(attribute='domain') | join(', ') }}
       ─────────────────────────────────────────────
       {% endif %}
   tags: debug
-
