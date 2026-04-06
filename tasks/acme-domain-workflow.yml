@@ -73,7 +73,7 @@
 # ======================================================================
 # ISSUE / RENEW
 # ======================================================================
-- name: Force renew acme.sh certificate(s) if force option specified
+- name: Force renew acme.sh certificate(s) if force option specified. Will sleep dnssleep seconds(default=30s)
   vars:
     acme_exe: "{{ acme_sh_bin_resolved | default(acme_sh_bin | default(acme_sh_default_bin, true)) }}"
   ansible.builtin.shell: >-
@@ -93,9 +93,9 @@
     executable: "{{ bash_executable_path }}"
   environment: "{{ item.dns_provider_api_keys | default(acme_sh_default_dns_provider_api_keys | default({})) }}"
   register: renew_result
-  changed_when: >-
+  changed_when:
     - renew_result.rc | default(1) | int == 0
-    - 'renew_result.stdout is search("Cert success|Renew|Create new certificate")'
+    - renew_result.stdout is search("cert success|renew|create new certificate", ignorecase=True)
   failed_when: >-
       (renew_result.rc | default(1) | int) not in [0, 2]
 #      and ("Reload error for" not in (renew_result.stderr | default('')))
