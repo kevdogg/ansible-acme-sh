@@ -408,7 +408,7 @@
 # ======================================================================
 # PLAN vs ACTUAL COMPARISON
 # ======================================================================
-- name: Compare planned vs actual outcome (per domain)
+- name: Compare planned vs actual outcome — PART 1: Define Actions
   ansible.builtin.set_fact:
     _planned_action: >-
       {{
@@ -427,10 +427,16 @@
         'FAILED' if acme_domain_status == 'failed' else
         (acme_domain_status | upper)
       }}
+  when: acme_domain_status is defined
+  tags: [debug]
+
+- name: Compare planned vs actual outcome — PART 2: Compare
+  ansible.builtin.set_fact:
     _plan_match: "{{ _planned_action == _actual_action }}"
-  when:
+  when: 
     - acme_domain_status is defined
-  tags: always
+    - _planned_action is defined
+  tags: [debug]
 
 - name: Show per-domain planned vs actual summary
   ansible.builtin.debug:
