@@ -93,8 +93,6 @@
     file: acme-parse-list.yml
     apply:
       tags: [always]
-  become: true
-  become_user: "{{ acme_sh_become_user }}"
   tags: [always, list]
 ########################
 # Issue / Renew Phase

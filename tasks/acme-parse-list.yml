@@ -91,11 +91,13 @@
       {%- set certs = {} -%}
       {%- for row in _rows_tokens -%}
         {# 1. Check if the row actually has enough columns to reach the 'Renew' index #}
-        {%- if row | length > _idx_renew -%}
+        {%- if row | length >= 5 -%}
           {%- set d = row[_idx_domain] | regex_replace('^\"(.*)\"$', '\\1') -%}
-          {%- set renew = row[_idx_renew] | regex_replace('^\"(.*)\"$', '\\1') -%}
-          {%- set created = row[_idx_created] | regex_replace('^\"(.*)\"$', '\\1') -%}
           
+          {# Use the known index for the domain, but use relative positions for the dates #}
+          {%- set renew = row[-1] | regex_replace('^\"(.*)\"$', '\\1') -%}
+          {%- set created = row[-2] | regex_replace('^\"(.*)\"$', '\\1') -%}
+
           {# 2. The CRITICAL SAFETY: Only parse if 'renew' actually looks like a date string #}
           {%- if 'T' in renew and 'Z' in renew -%}
             {%- set renew_dt = renew | to_datetime('%Y-%m-%dT%H:%M:%SZ') -%}
