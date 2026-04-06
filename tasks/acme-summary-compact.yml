@@ -64,7 +64,7 @@
       {% if renewed %}
       🔁 **Renewed**
       {% for e in renewed %}
-        - {{ e.domain }} ({{ e.new_days_remaining | default('?') }} days left)
+        - {{ e.domain }} ({{ acme_cert_info[e.domain].days_remaining | default('?') }} days left)
       {% endfor %}
       {% endif %}
 
