@@ -81,7 +81,8 @@
       {% if skipped_other %}
       ⏭️ **Skipped**
       {% for e in skipped_other %}
-        - {{ e.domain }}{% if e.message is defined %} → {{ e.message }}{% endif + '\n' %}
+        - {{ e.domain }}{% if e.message is defined %} → {{ e.message }}{% endif %}
+      {{ "" }}
       {% endfor %}
       {% endif %}
       
