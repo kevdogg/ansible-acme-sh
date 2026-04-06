@@ -185,7 +185,7 @@
           'skipped': (acme_summary.skipped | default([])) + [{
             'domain': (item.domains | first),
             'status': 'already_valid',
-            'message': 'acme.sh reports next renewal time in future'
+            'message': 'Next renewal: ' ~ (acme_cert_info[item.domains | first].renew | default('Unknown'))
           }]
         }, recursive=True)
       }}
