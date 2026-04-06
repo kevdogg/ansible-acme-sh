@@ -321,7 +321,7 @@
 # ======================================================================
 - name: Calculate domain status flags
   ansible.builtin.set_fact:
-    _acme_status_temp: >-
+    acme_domain_status: >-
       {{
         'failed' if (
           (issue_result.rc | default(0)) != 0
@@ -349,7 +349,7 @@
     acme_domain_result:
       domain: "{{ item.domains[0] }}"
       domains: "{{ item.domains }}"
-      status: "{{ _acme_status_temp }}"
+      status: "{{ acme_domain_status }}"
       reason_failed: "{{ _reason_failed_temp }}"
       rc_issue: "{{ issue_result.rc | default(omit) }}"
       rc_renew: "{{ renew_result.rc | default(omit) }}"
@@ -360,7 +360,7 @@
       live_cert_path: "{{ acme_live_cert_path_after | default(omit) }}"
       force_renew: "{{ item.force_renew | default(false) }}"
       new_days_remaining: "{{ acme_post_cert_info[item.domains[0]].days_remaining | default(omit) }}"
-  when: _acme_status_temp is defined
+  when: acme_domain_status is defined
 
 #- name: Set per-domain result
 #  ansible.builtin.set_fact:
