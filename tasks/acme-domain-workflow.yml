@@ -493,7 +493,9 @@
                           if (acme_domain_status == 'failed' and acme_domain_result not in acme_summary.failed) else acme_summary.failed
           }, recursive=True)
       }}
-  when: acme_domain_status is defined
+  when:
+    - acme_domain_status is defined
+    - acme_domain_result is defined
   tags: [always]
 
 # ======================================================================
