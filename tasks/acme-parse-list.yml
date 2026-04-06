@@ -84,38 +84,45 @@
     acme_cert_info: >-
       {%- set _header_tokens = _acme_lines[0] | regex_findall('\\S+') | map('regex_replace', '^\"(.*)\"$', '\\1') | list -%}
       {%- set _idx_domain = _header_tokens.index('Main_Domain') -%}
-      {%- set _idx_renew = _header_tokens.index('Renew') -%}
-      {%- set _idx_created = _header_tokens.index('Created') -%}
       {%- set certs = {} -%}
       {%- for row_raw in _acme_lines[1:] -%}
         {%- set row = row_raw | regex_findall('\\S+') -%}
-        {# 1. SAFETY: Does the row have enough columns to reach our target indexes? #}
-        {%- if row | length > _idx_renew and row | length > _idx_created -%}
+        {# If we have at least a domain and two dates (4 tokens min) #}
+        {%- if row | length >= 4 -%}
           {%- set d = row[_idx_domain] | regex_replace('^\"(.*)\"$', '\\1') -%}
-          {%- set renew = row[_idx_renew] | regex_replace('^\"(.*)\"$', '\\1') -%}
-          {%- set created = row[_idx_created] | regex_replace('^\"(.*)\"$', '\\1') -%}
-          {# 2. VALIDATION: Does the column actually contain a date string? #}
+          
+          {# ACME.SH lists usually have dates as the last two columns. 
+             We verify they look like dates before committing. #}
+          {%- set renew = row[-1] | regex_replace('^\"(.*)\"$', '\\1') -%}
+          {%- set created = row[-2] | regex_replace('^\"(.*)\"$', '\\1') -%}
+
           {%- if 'T' in renew and 'Z' in renew -%}
             {%- set renew_dt = renew | to_datetime('%Y-%m-%dT%H:%M:%SZ') -%}
             {%- set now_dt = now(utc=true).strftime('%Y-%m-%dT%H:%M:%SZ') | to_datetime('%Y-%m-%dT%H:%M:%SZ') -%}
             {%- set days = (renew_dt - now_dt).days -%}
             {%- set _ = certs.update({ d: {'created': created, 'renew': renew, 'days_remaining': days} }) -%}
           {%- else -%}
-            {# 3. FALLBACK: Record the domain but flag the missing data #}
-            {%- set _ = certs.update({ d: {'created': 'N/A', 'renew': 'N/A', 'days_remaining': '?'} }) -%}
+             {# If the last column isn't a date, maybe the second to last is? (Handles weird wrapping) #}
+             {%- set renew_alt = row[-2] | regex_replace('^\"(.*)\"$', '\\1') -%}
+             {%- if 'T' in renew_alt and 'Z' in renew_alt -%}
+                {%- set renew_dt = renew_alt | to_datetime('%Y-%m-%dT%H:%M:%SZ') -%}
+                {%- set now_dt = now(utc=true).strftime('%Y-%m-%dT%H:%M:%SZ') | to_datetime('%Y-%m-%dT%H:%M:%SZ') -%}
+                {%- set days = (renew_dt - now_dt).days -%}
+                {%- set _ = certs.update({ d: {'created': 'Unknown', 'renew': renew_alt, 'days_remaining': days} }) -%}
+             {%- endif -%}
           {%- endif -%}
         {%- endif -%}
       {%- endfor -%}
       {{ certs }}
   tags: [list, plan]
 
-- name: 🔍 THE TRUTH DEBUG
-  ansible.builtin.debug:
-    msg:
-      - "Full acme_cert_info: {{ acme_cert_info }}"
-      - "First Raw Line: {{ _acme_lines[1] | default('EMPTY') }}"
-      - "Tokens in First Line: {{ (_acme_lines[1] | default('')).split() }}"
-  tags: [always]
+#- name: 🔍 THE TRUTH DEBUG
+#  ansible.builtin.debug:
+#    msg:
+#      - "Full acme_cert_info: {{ acme_cert_info }}"
+#      - "First Raw Line: {{ _acme_lines[1] | default('EMPTY') }}"
+#      - "Tokens in First Line: {{ (_acme_lines[1] | default('')).split() }}"
+#  tags: [always]
 
 - name: LIST — compute renewal urgency + emoji (optional)
   ansible.builtin.set_fact:
