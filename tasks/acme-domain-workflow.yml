@@ -343,6 +343,7 @@
         omit
       }}
   when: issue_result is defined or renew_result is defined
+  tags: [always]
 
 - name: Build final domain result object
   ansible.builtin.set_fact:
@@ -361,6 +362,7 @@
       force_renew: "{{ item.force_renew | default(false) }}"
       new_days_remaining: "{{ acme_post_cert_info[item.domains[0]].days_remaining | default(omit) }}"
   when: acme_domain_status is defined
+  tags: [always]
 
 #- name: Set per-domain result
 #  ansible.builtin.set_fact:
@@ -428,7 +430,7 @@
     _plan_match: "{{ _planned_action == _actual_action }}"
   when:
     - acme_domain_status is defined
-  tags: debug
+  tags: always
 
 - name: Show per-domain planned vs actual summary
   ansible.builtin.debug:
@@ -470,6 +472,7 @@
           }, recursive=True)
       }}
   when: acme_domain_status is defined
+  tags: [always]
 
 # ======================================================================
 # OPTIONAL DEBUG SNAPSHOT
@@ -479,6 +482,6 @@
     file: debug-acme-scoreboard.yml
     apply:
       tags: [always]
-  when: ansible_verbosity | int >= 2
+  when: (ansible_verbosity | int >= 2) or ('debug' in ansible_run_tags)
   tags: debug
 
