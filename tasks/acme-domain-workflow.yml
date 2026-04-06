@@ -177,21 +177,6 @@
     - not item.force_renew | default(false) | bool
     - not item.custom_command | default(false) | bool
 
-- name: DEBUG — Inspect acme_cert_info and current key
-  ansible.builtin.debug:
-    msg: 
-      - "Full Dict: {{ acme_cert_info | default('NOT DEFINED') }}"
-      - "Current Key: {{ item.domains | first }}"
-      - "Match Found?: {{ (item.domains | first) in acme_cert_info }}"
-  when:
-    - acme_cert_info is defined
-  tags: [debug]
-
-- name: Wait for user to press Enter
-  ansible.builtin.pause:
-    prompt: "Ready to proceed? Press Enter to continue."
-  tags: [debug]
-
 - name: Mark certificate as already valid (no renewal needed) if certificate not due for renewal
   ansible.builtin.set_fact:
     acme_summary: >-
