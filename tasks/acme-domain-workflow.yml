@@ -321,21 +321,33 @@
 # ======================================================================
 - name: Calculate domain status flags
   ansible.builtin.set_fact:
+    # 1. Status: Is it a Skip, a Failure, a Renewal, or a fresh Install?
     acme_domain_status: >-
       {{
-        'failed' if (
+        'skipped' if ('Skip' in (issue_result.stdout | default(''))) else
+        'failed'  if (
           (issue_result.rc | default(0)) != 0
           or (renew_result.rc | default(0)) != 0
           or (pkcs_result.rc | default(0)) != 0
           or (deploy_result.rc | default(0)) != 0
         ) else (
           'renewed' if acme_cert_updated | default(false)
-          else 'skipped' if ('Skip' in (issue_result.stdout | default('')))
           else 'installed'
         )
       }}
+
+    # Add a specific sub-status for your 'Already absent' logic
+    _acme_sub_status: >-
+      {{
+        'already_absent' if 'already absent' in (issue_result.stdout | default('') | lower)
+        else 'normal'
+      }}
+  tags: [always]
+
+    # 2. Reason: Only set this if we are actually in a 'failed' state
     _reason_failed_temp: >-
       {{
+        omit if ('Skip' in (issue_result.stdout | default(''))) else
         'issue'  if (issue_result.rc | default(0)) != 0 else
         'renew'  if (renew_result.rc | default(0)) != 0 else
         'pkcs12' if (pkcs_result.rc | default(0)) != 0 else
@@ -350,7 +362,8 @@
     acme_domain_result:
       domain: "{{ item.domains[0] }}"
       domains: "{{ item.domains }}"
-      status: "{{ acme_domain_status }}"
+      status: "{{ _acme_sub_status }}"
+      acme_status: "{{ acme_domain_status }}"
       reason_failed: "{{ _reason_failed_temp }}"
       rc_issue: "{{ issue_result.rc | default(omit) }}"
       rc_renew: "{{ renew_result.rc | default(omit) }}"
