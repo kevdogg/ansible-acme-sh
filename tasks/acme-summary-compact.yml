@@ -207,6 +207,6 @@
 # ======================================================================
 - name: SUMMARY — report timestamp
   ansible.builtin.debug:
-    msg: "📅 Summary generated at: {{ ansible_date_time.iso8601 }} on {{ inventory_hostname }}"
+    msg: "📅 Summary generated at: {{ ansible_facts['date_time']['iso8601'] }} on {{ inventory_hostname }}"
   run_once: true
   tags: summary
