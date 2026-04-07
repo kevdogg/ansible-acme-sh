@@ -103,7 +103,7 @@
             
             {%- set window = (r_dt - c_dt).days -%}
             {%- set buffer_sec = ((window / 2) | int) * 86400 -%}
-            {%- set expiry_dt = (r_dt.strftime('%s') | int + buffer_sec) | strftime('%Y-%m-%dT%H:%M:%SZ', utc=true) | to_datetime('%Y-%m-%dT%H:%M:%SZ') -%}
+            {%- set expiry_dt = ((r_dt.strftime('%s') | int + buffer_sec) | strftime('%Y-%m-%dT%H:%M:%SZ')) | to_datetime('%Y-%m-%dT%H:%M:%SZ') -%}
 
             {%- set _ = certs.update({ d: {
                 'key_type': k,
