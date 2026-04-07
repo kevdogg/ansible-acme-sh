@@ -78,11 +78,12 @@
     fail_msg: "acme.sh --list output missing required columns. Parsed header is: {{ _header_tokens }}"
   tags: [list, plan]
 
-- name: LIST — parse acme.sh into acme_cert_info (Final Version)
+- name: LIST — parse acme.sh into acme_cert_info (The "Actually Final" Version)
   ansible.builtin.set_fact:
     acme_cert_info: >-
       {%- set certs = {} -%}
-      {%- set now_epoch = now(utc=true).strftime('%s') | int -%}
+      {# Get current time as a datetime object #}
+      {%- set now_dt = now(utc=true) -%}
       {%- for row_raw in (_acme_lines | default([]))[1:] -%}
         {%- set row = row_raw | regex_findall('\\S+') -%}
         {%- if row | length >= 3 -%}
@@ -99,26 +100,22 @@
             {%- set c_str = sorted_dates[0] -%}
             {%- set r_str = sorted_dates[-1] -%}
             
-            {# Convert both to epoch for math #}
-            {%- set c_epoch = c_str | to_datetime('%Y-%m-%dT%H:%M:%SZ') | json_query('strftime("%s")') | default(0) | int -%}
-            {# If json_query is cranky, we use the direct strftime method #}
-            {%- set c_epoch = (c_str | to_datetime('%Y-%m-%dT%H:%M:%SZ')).strftime('%s') | int -%}
-            {%- set r_epoch = (r_str | to_datetime('%Y-%m-%dT%H:%M:%SZ')).strftime('%s') | int -%}
+            {# 1. Create datetime objects #}
+            {%- set c_dt = c_str | to_datetime('%Y-%m-%dT%H:%M:%SZ') -%}
+            {%- set r_dt = r_str | to_datetime('%Y-%m-%dT%H:%M:%SZ') -%}
             
-            {# Math: Gap = Renew - Created. Expiry = Renew + Gap #}
-            {%- set gap = r_epoch - c_epoch -%}
-            {%- set expiry_epoch = r_epoch + gap -%}
-            
-            {# Convert back to string and date object for the "days left" calculation #}
-            {%- set expiry_str = expiry_epoch | strftime('%Y-%m-%dT%H:%M:%SZ', utc=true) -%}
+            {# 2. Math: (Renew - Created) gives us the 'window'. Add that to Renew to get Expiry. #}
+            {%- set gap = r_dt - c_dt -%}
+            {%- set expiry_dt = r_dt + gap -%}
 
+            {# 3. Use the .strftime() METHOD (not the filter) to get strings #}
             {%- set _ = certs.update({ d: {
                 'key_type': k,
                 'sans': s_list,
                 'created': c_str,
                 'renew': r_str,
-                'expiry': expiry_str,
-                'days_to_expiry': ((expiry_epoch - now_epoch) / 86400) | int
+                'expiry': expiry_dt.strftime('%Y-%m-%dT%H:%M:%SZ'),
+                'days_to_expiry': (expiry_dt - now_dt).days
               } }) -%}
           {%- endif -%}
         {%- endif -%}
