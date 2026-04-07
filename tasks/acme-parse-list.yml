@@ -97,10 +97,11 @@
           {%- for t in row -%}{%- if 'T' in t and 'Z' in t -%}{%- set _ = dates.append(t) -%}{%- endif -%}{%- endfor -%}
           {%- set sorted_dates = dates | sort -%}
 
-          {# 2. CA Pattern Hunter (Strict Exclusion: 0, 1, 2) #}
+          {# 2. CA Pattern Hunter (The "No-Comma" Strategy) #}
           {%- set ca_found = "Unknown" -%}
           {%- for field in row -%}
-            {%- if loop.index0 > 2 and '.' in field and 'T' not in field and 'Z' not in field and ca_found == "Unknown" -%}
+            {# Criteria: Has a dot, NOT a date, NOT the main domain, NOT a list (comma) #}
+            {%- if '.' in field and 'T' not in field and 'Z' not in field and field != d and ',' not in field and ca_found == "Unknown" -%}
               {%- set ca_found = field -%}
             {%- endif -%}
           {%- endfor -%}
@@ -108,10 +109,8 @@
           {%- if sorted_dates | length >= 2 -%}
             {%- set c_str = sorted_dates[0] -%}
             {%- set r_str = sorted_dates[-1] -%}
-            
             {%- set c_dt = c_str | to_datetime('%Y-%m-%dT%H:%M:%SZ') -%}
             {%- set r_dt = r_str | to_datetime('%Y-%m-%dT%H:%M:%SZ') -%}
-            
             {%- set gap = r_dt - c_dt -%}
             {%- set expiry_dt = r_dt + gap -%}
 
