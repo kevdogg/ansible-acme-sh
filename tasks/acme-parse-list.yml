@@ -78,43 +78,45 @@
     fail_msg: "acme.sh --list output missing required columns. Parsed header is: {{ _header_tokens }}"
   tags: [list, plan]
 
-- name: LIST — parse NEW format into acme_cert_info
-  when: _acme_lines | length > 1
+- name: LIST — parse acme.sh into acme_cert_info (Final Version)
   ansible.builtin.set_fact:
     acme_cert_info: >-
-      {%- set _header_tokens = _acme_lines[0] | regex_findall('\\S+') | map('regex_replace', '^\"(.*)\"$', '\\1') | list -%}
-      {%- set _idx_domain = _header_tokens.index('Main_Domain') -%}
       {%- set certs = {} -%}
-      {%- for row_raw in _acme_lines[1:] -%}
+      {%- set now_dt = now(utc=true).strftime('%Y-%m-%dT%H:%M:%SZ') | to_datetime('%Y-%m-%dT%H:%M:%SZ') -%}
+      {%- for row_raw in _acme_lines | default([])[1:] -%}
         {%- set row = row_raw | regex_findall('\\S+') -%}
-        {# If we have at least a domain and two dates (4 tokens min) #}
-        {%- if row | length >= 4 -%}
-          {%- set d = row[_idx_domain] | regex_replace('^\"(.*)\"$', '\\1') -%}
+        {%- if row | length >= 3 -%}
+          {%- set d = row[0] | regex_replace('^\"(.*)\"$', '\\1') -%}
+          {%- set k = row[1] | regex_replace('^\"(.*)\"$', '\\1') -%}
+          {%- set s_raw = row[2] | regex_replace('^\"(.*)\"$', '\\1') -%}
+          {%- set s_list = [] if s_raw == 'no' else s_raw.split(',') -%}
           
-          {# ACME.SH lists usually have dates as the last two columns. 
-             We verify they look like dates before committing. #}
-          {%- set renew = row[-1] | regex_replace('^\"(.*)\"$', '\\1') -%}
-          {%- set created = row[-2] | regex_replace('^\"(.*)\"$', '\\1') -%}
+          {%- set dates = [] -%}
+          {%- for t in row -%}{%- if 'T' in t and 'Z' in t -%}{%- set _ = dates.append(t | regex_replace('^\"(.*)\"$', '\\1')) -%}{%- endif -%}{%- endfor -%}
+          {%- set sorted_dates = dates | sort -%}
 
-          {%- if 'T' in renew and 'Z' in renew -%}
-            {%- set renew_dt = renew | to_datetime('%Y-%m-%dT%H:%M:%SZ') -%}
-            {%- set now_dt = now(utc=true).strftime('%Y-%m-%dT%H:%M:%SZ') | to_datetime('%Y-%m-%dT%H:%M:%SZ') -%}
-            {%- set days = (renew_dt - now_dt).days -%}
-            {%- set _ = certs.update({ d: {'created': created, 'renew': renew, 'days_remaining': days} }) -%}
-          {%- else -%}
-             {# If the last column isn't a date, maybe the second to last is? (Handles weird wrapping) #}
-             {%- set renew_alt = row[-2] | regex_replace('^\"(.*)\"$', '\\1') -%}
-             {%- if 'T' in renew_alt and 'Z' in renew_alt -%}
-                {%- set renew_dt = renew_alt | to_datetime('%Y-%m-%dT%H:%M:%SZ') -%}
-                {%- set now_dt = now(utc=true).strftime('%Y-%m-%dT%H:%M:%SZ') | to_datetime('%Y-%m-%dT%H:%M:%SZ') -%}
-                {%- set days = (renew_dt - now_dt).days -%}
-                {%- set _ = certs.update({ d: {'created': 'Unknown', 'renew': renew_alt, 'days_remaining': days} }) -%}
-             {%- endif -%}
+          {%- if sorted_dates | length >= 2 -%}
+            {%- set c_str = sorted_dates[0] -%}
+            {%- set r_str = sorted_dates[-1] -%}
+            {%- set c_dt = c_str | to_datetime('%Y-%m-%dT%H:%M:%SZ') -%}
+            {%- set r_dt = r_str | to_datetime('%Y-%m-%dT%H:%M:%SZ') -%}
+            
+            {%- set window = (r_dt - c_dt).days -%}
+            {%- set buffer_sec = ((window / 2) | int) * 86400 -%}
+            {%- set expiry_dt = (r_dt.strftime('%s') | int + buffer_sec) | strftime('%Y-%m-%dT%H:%M:%SZ', utc=true) | to_datetime('%Y-%m-%dT%H:%M:%SZ') -%}
+
+            {%- set _ = certs.update({ d: {
+                'key_type': k,
+                'sans': s_list,
+                'created': c_str,
+                'renew': r_str,
+                'expiry': expiry_dt.strftime('%Y-%m-%dT%H:%M:%SZ'),
+                'days_to_expiry': (expiry_dt - now_dt).days
+              } }) -%}
           {%- endif -%}
         {%- endif -%}
       {%- endfor -%}
       {{ certs }}
-  tags: [list, plan]
 
 #- name: 🔍 THE TRUTH DEBUG
 #  ansible.builtin.debug:
