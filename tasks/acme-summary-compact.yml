@@ -35,6 +35,10 @@
     bi: "\e[1;3m"       # Bold Italic
     reset: "\e[0m"      # Reset Formatting
 
+    # Central Time is UTC-5 (CDT) or UTC-6 (CST)
+    # Most modern Python/Ansible setups can handle 'America/Chicago' directly
+    local_tz: "America/Chicago"
+
     # --- Existing Playbook Action Vars ---
     installed: "{{ acme_summary.installed | default([]) }}"
     renewed:   "{{ acme_summary.renewed | default([]) }}"
@@ -145,14 +149,15 @@
       ================================{{ reset }}
       {% for domain, info in acme_cert_info.items() %}
       {{ b }}DOMAIN:{{ reset }} {{ domain }} [{{ info.key_type }}]
+      - CA: {{ info.ca }}
       - SANS:    {{ info.sans | join(', ') if info.sans else 'None' }}
-      - Created: {{ info.created }}
-      - Expiry:  {{ info.expiry }} ({{ info.days_remaining }} days left)
-      - Renew:   {{ info.renew }}
+      - Created: {{ (info.created | to_datetime('%Y-%m-%dT%H:%M:%SZ')).astimezone().strftime('%Y-%m-%d %H:%M:%S') }}
+      - Expiry:  {{ (info.expiry  | to_datetime('%Y-%m-%dT%H:%M:%SZ')).astimezone().strftime('%Y-%m-%d %H:%M:%S') }} ({{ info.days_remaining }} days left)
+      - Renew:   {{ (info.renew   | to_datetime('%Y-%m-%dT%H:%M:%SZ')).astimezone().strftime('%Y-%m-%d %H:%M:%S') }}
       --------------------------------
       {% endfor %}
 
-      📅 Summary generated at: {{ report_time }} on {{ bi }}{{ inventory_hostname }}{{ reset }}
+      📅 Summary generated at: {{ now(utc=false).strftime('%Y-%m-%d %H:%M:%S') }} Central Time
 
 ## ======================================================================
 ## ENRICHED REMOVAL SUMMARY (added section)
