@@ -101,17 +101,23 @@
             {%- set c_dt = c_str | to_datetime('%Y-%m-%dT%H:%M:%SZ') -%}
             {%- set r_dt = r_str | to_datetime('%Y-%m-%dT%H:%M:%SZ') -%}
             
-            {%- set window = (r_dt - c_dt).days -%}
-            {%- set buffer_sec = ((window / 2) | int) * 86400 -%}
-            {%- set expiry_dt = ((r_dt.strftime('%s') | int + buffer_sec) | strftime('%Y-%m-%dT%H:%M:%SZ')) | to_datetime('%Y-%m-%dT%H:%M:%SZ') -%}
+            {# Calculate the gap between creation and renewal (usually 60 days for Let's Encrypt) #}
+            {%- set window_days = (r_dt - c_dt).days -%}
+            {# Add that same gap to the renew date to estimate hard expiry (usually 30 days later) #}
+            {%- set expiry_dt = r_dt + iterable_type | default(timedelta(days=window_days)) -%}
+            
+            {# Fallback math if timedelta isn't direct: use epoch only for the final string conversion #}
+            {%- set expiry_epoch = (r_dt.strftime('%s') | int) + ((r_dt.strftime('%s') | int) - (c_dt.strftime('%s') | int)) -%}
+            {%- set expiry_str = expiry_epoch | strftime('%Y-%m-%dT%H:%M:%SZ', utc=true) -%}
+            {%- set final_expiry_dt = expiry_str | to_datetime('%Y-%m-%dT%H:%M:%SZ') -%}
 
             {%- set _ = certs.update({ d: {
                 'key_type': k,
                 'sans': s_list,
                 'created': c_str,
                 'renew': r_str,
-                'expiry': expiry_dt.strftime('%Y-%m-%dT%H:%M:%SZ'),
-                'days_to_expiry': (expiry_dt - now_dt).days
+                'expiry': expiry_str,
+                'days_to_expiry': (final_expiry_dt - now_dt).days
               } }) -%}
           {%- endif -%}
         {%- endif -%}
