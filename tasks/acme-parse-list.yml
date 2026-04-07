@@ -78,13 +78,12 @@
     fail_msg: "acme.sh --list output missing required columns. Parsed header is: {{ _header_tokens }}"
   tags: [list, plan]
 
-- name: LIST — parse acme.sh into acme_cert_info (The "Pattern + Exclusion" Final Version)
+- name: LIST — parse acme.sh into acme_cert_info
   ansible.builtin.set_fact:
     acme_cert_info: >-
       {%- set certs = {} -%}
       {%- set now_dt = now(utc=true) -%}
       {%- for row_raw in (_acme_lines | default([]))[1:] -%}
-        {# 1. The Row Bucket #}
         {%- set row = row_raw | regex_findall('\\S+') | map('regex_replace', '^\"(.*)\"$', '\\1') | list -%}
         
         {%- if row | length >= 4 -%}
@@ -93,16 +92,15 @@
           {%- set s_raw = row[2] -%}
           {%- set s_list = [] if s_raw == 'no' else s_raw.split(',') -%}
           
-          {# 2. Date Hunting (The Bucket) #}
+          {# 1. Date Bucket #}
           {%- set dates = [] -%}
           {%- for t in row -%}{%- if 'T' in t and 'Z' in t -%}{%- set _ = dates.append(t) -%}{%- endif -%}{%- endfor -%}
           {%- set sorted_dates = dates | sort -%}
 
-          {# 3. CA Hunting (The Pattern Strategy - Starting from Index 3) #}
-          {# We skip 0 (Domain), 1 (Key), 2 (SANs) to avoid false positives #}
+          {# 2. CA Pattern Hunter (Strict Exclusion: 0, 1, 2) #}
           {%- set ca_found = "Unknown" -%}
-          {%- for field in row[3:] -%}
-            {%- if '.' in field and 'T' not in field and 'Z' not in field and ca_found == "Unknown" -%}
+          {%- for field in row -%}
+            {%- if loop.index0 > 2 and '.' in field and 'T' not in field and 'Z' not in field and ca_found == "Unknown" -%}
               {%- set ca_found = field -%}
             {%- endif -%}
           {%- endfor -%}
@@ -129,7 +127,7 @@
           {%- endif -%}
         {%- endif -%}
       {%- endfor -%}
-      {{ certs | from_yaml }}
+      {{ certs }}
 
 #- name: 🔍 THE TRUTH DEBUG
 #  ansible.builtin.debug:
