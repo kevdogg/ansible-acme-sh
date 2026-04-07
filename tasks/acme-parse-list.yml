@@ -83,7 +83,7 @@
     acme_cert_info: >-
       {%- set certs = {} -%}
       {%- set now_dt = now(utc=true).strftime('%Y-%m-%dT%H:%M:%SZ') | to_datetime('%Y-%m-%dT%H:%M:%SZ') -%}
-      {%- for row_raw in _acme_lines | default([])[1:] -%}
+      {%- for row_raw in (_acme_lines | default([]))[1:] -%}
         {%- set row = row_raw | regex_findall('\\S+') -%}
         {%- if row | length >= 3 -%}
           {%- set d = row[0] | regex_replace('^\"(.*)\"$', '\\1') -%}
