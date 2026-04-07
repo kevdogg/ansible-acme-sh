@@ -85,27 +85,27 @@
       {%- set now_dt = now(utc=true) -%}
       {%- for row_raw in (_acme_lines | default([]))[1:] -%}
         {%- set row = row_raw | regex_findall('\\S+') | map('regex_replace', '^\"(.*)\"$', '\\1') | list -%}
-        
         {%- if row | length >= 4 -%}
           {%- set d = row[0] -%}
           {%- set k = row[1] -%}
-          {%- set s_raw = row[2] -%}
-          {%- set s_list = [] if s_raw == 'no' else s_raw.split(',') -%}
+          {%- set s_list = [] if row[2] == 'no' else row[2].split(',') -%}
           
-          {# 1. Date Bucket #}
-          {%- set dates = row | select('search', 'T') | select('search', 'Z') | list | sort -%}
+          {# LANDMARK: Get the dates first #}
+          {%- set dates = [] -%}
+          {%- for t in row -%}{%- if 'T' in t and 'Z' in t -%}{%- set _ = dates.append(t) -%}{%- endif -%}{%- endfor -%}
+          {%- set sorted_dates = dates | sort -%}
 
-          {# 2. CA Filtered Search #}
-          {# We want: has a dot, no comma, no T, and isn't the main domain 'd' #}
-          {%- set ca_candidates = row | reject('equalto', d) 
-                                      | select('search', '\\.') 
-                                      | reject('search', ',') 
-                                      | reject('search', 'T') | list -%}
-          {%- set ca_found = ca_candidates[0] if ca_candidates | length > 0 else "Unknown" -%}
+          {# CA HUNTER: Strictly ignore 0,1,2 and use Namespace for Scope #}
+          {%- set ns = namespace(ca="Unknown") -%}
+          {%- for field in row -%}
+            {%- if loop.index0 > 2 and '.' in field and 'T' not in field and 'Z' not in field and ns.ca == "Unknown" -%}
+              {%- set ns.ca = field -%}
+            {%- endif -%}
+          {%- endfor -%}
 
-          {%- if dates | length >= 2 -%}
-            {%- set c_str = dates[0] -%}
-            {%- set r_str = dates[-1] -%}
+          {%- if sorted_dates | length >= 2 -%}
+            {%- set c_str = sorted_dates[0] -%}
+            {%- set r_str = sorted_dates[-1] -%}
             {%- set c_dt = c_str | to_datetime('%Y-%m-%dT%H:%M:%SZ') -%}
             {%- set r_dt = r_str | to_datetime('%Y-%m-%dT%H:%M:%SZ') -%}
             {%- set gap = r_dt - c_dt -%}
@@ -114,7 +114,7 @@
             {%- set _ = certs.update({ d: {
                 'key_type': k,
                 'sans': s_list,
-                'ca': ca_found,
+                'ca': ns.ca,
                 'created': c_str,
                 'renew': r_str,
                 'expiry': expiry_dt.strftime('%Y-%m-%dT%H:%M:%SZ'),
