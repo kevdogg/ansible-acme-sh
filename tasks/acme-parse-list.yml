@@ -82,7 +82,7 @@
   ansible.builtin.set_fact:
     acme_cert_info: >-
       {%- set certs = {} -%}
-      {%- set now_dt = now(utc=true).strftime('%Y-%m-%dT%H:%M:%SZ') | to_datetime('%Y-%m-%dT%H:%M:%SZ') -%}
+      {%- set now_epoch = now(utc=true).strftime('%s') | int -%}
       {%- for row_raw in (_acme_lines | default([]))[1:] -%}
         {%- set row = row_raw | regex_findall('\\S+') -%}
         {%- if row | length >= 3 -%}
@@ -98,18 +98,19 @@
           {%- if sorted_dates | length >= 2 -%}
             {%- set c_str = sorted_dates[0] -%}
             {%- set r_str = sorted_dates[-1] -%}
-            {%- set c_dt = c_str | to_datetime('%Y-%m-%dT%H:%M:%SZ') -%}
-            {%- set r_dt = r_str | to_datetime('%Y-%m-%dT%H:%M:%SZ') -%}
             
-            {# Calculate the gap between creation and renewal (usually 60 days for Let's Encrypt) #}
-            {%- set window_days = (r_dt - c_dt).days -%}
-            {# Add that same gap to the renew date to estimate hard expiry (usually 30 days later) #}
-            {%- set expiry_dt = r_dt + iterable_type | default(timedelta(days=window_days)) -%}
+            {# Convert both to epoch for math #}
+            {%- set c_epoch = c_str | to_datetime('%Y-%m-%dT%H:%M:%SZ') | json_query('strftime("%s")') | default(0) | int -%}
+            {# If json_query is cranky, we use the direct strftime method #}
+            {%- set c_epoch = (c_str | to_datetime('%Y-%m-%dT%H:%M:%SZ')).strftime('%s') | int -%}
+            {%- set r_epoch = (r_str | to_datetime('%Y-%m-%dT%H:%M:%SZ')).strftime('%s') | int -%}
             
-            {# Fallback math if timedelta isn't direct: use epoch only for the final string conversion #}
-            {%- set expiry_epoch = (r_dt.strftime('%s') | int) + ((r_dt.strftime('%s') | int) - (c_dt.strftime('%s') | int)) -%}
+            {# Math: Gap = Renew - Created. Expiry = Renew + Gap #}
+            {%- set gap = r_epoch - c_epoch -%}
+            {%- set expiry_epoch = r_epoch + gap -%}
+            
+            {# Convert back to string and date object for the "days left" calculation #}
             {%- set expiry_str = expiry_epoch | strftime('%Y-%m-%dT%H:%M:%SZ', utc=true) -%}
-            {%- set final_expiry_dt = expiry_str | to_datetime('%Y-%m-%dT%H:%M:%SZ') -%}
 
             {%- set _ = certs.update({ d: {
                 'key_type': k,
@@ -117,7 +118,7 @@
                 'created': c_str,
                 'renew': r_str,
                 'expiry': expiry_str,
-                'days_to_expiry': (final_expiry_dt - now_dt).days
+                'days_to_expiry': ((expiry_epoch - now_epoch) / 86400) | int
               } }) -%}
           {%- endif -%}
         {%- endif -%}
