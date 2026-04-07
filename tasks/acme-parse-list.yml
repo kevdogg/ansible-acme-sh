@@ -129,7 +129,7 @@
           {%- endif -%}
         {%- endif -%}
       {%- endfor -%}
-      {{ certs }}
+      {{ certs | from_yaml }}
 
 #- name: 🔍 THE TRUTH DEBUG
 #  ansible.builtin.debug:
