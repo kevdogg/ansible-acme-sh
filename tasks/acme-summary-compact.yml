@@ -134,7 +134,7 @@
       {% if orphaned | length > 0 %}
       {{ b }}⚠️ ORPHANED{{ reset }} (In acme.sh, NOT in Playbook):
       {% for d in orphaned %}
-        - {{ d }} ({{ acme_cert_info[d].days_to_expiry }} days left)
+        - {{ d }} ({{ acme_cert_info[d].days_remaining }} days left)
       {% endfor %}
       {% else %}
       ✅ No orphaned certificates found.
@@ -147,7 +147,7 @@
       {{ b }}DOMAIN:{{ reset }} {{ domain }} [{{ info.key_type }}]
       - SANS:    {{ info.sans | join(', ') if info.sans else 'None' }}
       - Created: {{ info.created }}
-      - Expiry:  {{ info.expiry }} ({{ info.days_to_expiry }} days left)
+      - Expiry:  {{ info.expiry }} ({{ info.days_remaining }} days left)
       - Renew:   {{ info.renew }}
       --------------------------------
       {% endfor %}

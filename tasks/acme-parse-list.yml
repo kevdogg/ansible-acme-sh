@@ -115,7 +115,7 @@
                 'created': c_str,
                 'renew': r_str,
                 'expiry': expiry_dt.strftime('%Y-%m-%dT%H:%M:%SZ'),
-                'days_to_expiry': (expiry_dt - now_dt).days
+                'days_remaining': (expiry_dt - now_dt).days
               } }) -%}
           {%- endif -%}
         {%- endif -%}
