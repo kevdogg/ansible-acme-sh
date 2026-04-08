@@ -4,284 +4,116 @@
 # ----------------------------------------------------------------------------
 # Removes a single domain entry from acme.sh tracking + local deployed copies.
 #
-# Supports BOTH call styles:
-#
-# New model:
-#   acme_domain
-#   acme_is_ecc
-#   acme_remove_all_variants
-#
-# Legacy model:
-#   item.domains[0]
-#   item.remove_all_variants
-#
-# ECC preference defaults to TRUE.
-# ============================================================================
-
-# ---------------------------------------------------------------------------
-# 0) Normalize input model (supports both legacy + new callers)
-# ---------------------------------------------------------------------------
-- name: Normalize domain removal inputs
+---
+# ===========================================================================
+# 0) Normalize & Validate (The Gold Standard)
+# ===========================================================================
+- name: Resolve the target domain for removal
   ansible.builtin.set_fact:
     _acme_domain: >-
-      {{
-        acme_domain
-        | default(item.domains[0] if (item is defined and item.domains is defined) else none)
-      }}
-
-    _acme_remove_all_variants: >-
-      {{
-        acme_remove_all_variants
-        | default(
-            item.remove_all_variants
-            | default(acme_sh_remove_all_variants
-            | default(acme_sh_default_remove_all_variants, true), true),
-            true
-          )
-      }}
-
-    # ECC default = TRUE (your preference)
-    _acme_is_ecc: >-
-      {{
-        acme_is_ecc
-        | default(true)
+      {{ 
+        acme_domain | default(
+          item.key if (item is mapping and item.key is defined) 
+          else (item.domains[0] if (item is mapping and item.domains is defined) 
+          else item), true
+        ) 
       }}
   changed_when: false
 
-- name: Ensure domain is resolved for removal
-  ansible.builtin.assert:
-    that:
-      - _acme_domain is not none
-    fail_msg: "acme-domain-remove.yml called without a resolvable domain"
-
-
-- name: Check acme.sh binary exists for domain removal
+- name: Check if acme.sh binary exists (Pre-Removal Check)
   ansible.builtin.stat:
-    path: "{{ acme_sh_bin | default(acme_sh_default_bin, true) }}"
+    path: "{{ acme_sh_bin }}"
   register: _acme_bin_stat_local
-  changed_when: false
   become: true
   become_user: "{{ acme_sh_become_user }}"
 
-- name: Record skip when acme.sh missing (cannot remove domain)
-  ansible.builtin.set_fact:
-    acme_summary: >-
-      {{
-        acme_summary
-        | combine({
-            'skipped': (acme_summary.skipped | default([])) + [{
-              'domain': _acme_domain,
-              'status': 'skipped',
-              'message': 'acme.sh binary missing; cannot remove domain'
-            }]
-          }, recursive=True)
-      }}
-  when: not (_acme_bin_stat_local.stat.exists | bool)
-  changed_when: true
-  tags: [summary]
+- name: Validate domain input
+  ansible.builtin.assert:
+    that: 
+      - _acme_domain is defined
+      - _acme_domain | length > 0
+      - _acme_domain != 'none'
+    fail_msg: "acme-domain-remove.yml could not resolve a domain from 'acme_domain' or 'item'."
 
-- name: Skip domain removal because acme.sh is missing
-  ansible.builtin.debug:
-    msg: "⏭️  Skipping removal of {{ _acme_domain }}: acme.sh not installed"
-  when: not (_acme_bin_stat_local.stat.exists | bool)
+# ===========================================================================
+# 1) Identify variants (Only if binary exists)
+# ===========================================================================
+- name: Determine variants to remove from parsed inventory
+  ansible.builtin.set_fact:
+    _targets_to_remove: >-
+      {%- set targets = [] -%}
+      {%- for key, val in acme_cert_info.items() -%}
+        {%- if key == _acme_domain -%}
+          {%- set _ = targets.append({'domain': key, 'is_ecc': 'ec-' in (val.key_type | default('')) }) -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ targets }}
+  when: _acme_bin_stat_local.stat.exists | bool
   changed_when: false
 
-# --- Resolve RSA/ECC paths ---
-- name: Resolve RSA/ECC paths before removal
-  vars:
-    acme_domain: "{{ _acme_domain }}"
-    acme_is_ecc: "{{ _acme_is_ecc }}"
-  ansible.builtin.include_tasks:
-    file: acme-resolve-rsa-vs-ecc-paths.yml
-    apply:
-      tags: [always]
-  when: _acme_bin_stat_local.stat.exists | bool
-
-# --- Detect RSA + ECC internal directories ---
-- name: Check for RSA and ECC certificate directories
-  ansible.builtin.stat:
-    path: "{{ candidate.path }}"
-  loop:
-    - { name: "RSA", path: "{{ acme_sh_directory_resolved }}/{{ _acme_domain }}" }
-    - { name: "ECC", path: "{{ acme_sh_directory_resolved }}/{{ _acme_domain }}_ecc" }
+# ===========================================================================
+# 2) Logical Removal via acme.sh
+# ===========================================================================
+- name: Remove domain from acme.sh tracking
+  ansible.builtin.shell: >-
+    {{ acme_sh_bin }} --remove -d {{ item.domain }} {{ '--ecc' if item.is_ecc else '' }}
+  loop: "{{ _targets_to_remove | default([]) }}"
   loop_control:
-    loop_var: candidate
-    label: "{{ candidate.name }}"
-  register: _variant_dir_stat
-  changed_when: false
-  become: true
-  become_user: "{{ acme_sh_become_user }}"
-  when: _acme_bin_stat_local.stat.exists | bool
-
-- name: Set variant existence flags
-  ansible.builtin.set_fact:
-    _has_rsa_variant: >-
-      {{ (_variant_dir_stat.results 
-          | selectattr('candidate.name','equalto','RSA') 
-          | map(attribute='stat.exists') | first) | default(false) }}
-    _has_ecc_variant: >-
-      {{ (_variant_dir_stat.results 
-          | selectattr('candidate.name','equalto','ECC') 
-          | map(attribute='stat.exists') | first) | default(false) }}
-    # Calculate "both" by checking the results list directly instead of the variables above
-    _has_both_variants: >-
-      {{ (_variant_dir_stat.results | selectattr('stat.exists', 'equalto', true) | list | length) == 2 }}
-  become: true
-  become_user: "{{ acme_sh_become_user }}"
-  when: _acme_bin_stat_local.stat.exists | bool
-
-# --- Warn if both exist ---
-- name: "⚠️ WARNING: Multiple Certificate Variants Found"
-  ansible.builtin.debug:
-    msg: 
-      - "----------------------------------------------------------------"
-      - "WARNING: Both RSA and ECC directories exist for {{ _acme_domain }}."
-      - "Resolved removal target: {{ acme_sh_cert_path_resolved }}."
-      - "remove_all_variants: {{ _acme_remove_all_variants }}."
-      - "----------------------------------------------------------------"
-  when:
-    - _has_both_variants | bool
-    - _acme_bin_stat_local.stat.exists | bool
-  tags: [remove, cert, debug]
-
-# STEP 1 — Stop tracking with acme.sh
-- name: Remove domain from acme.sh tracking (best effort)
-  vars:
-    acme_exe: "{{ acme_sh_bin | default(acme_sh_default_bin, true) }}"
-    _cmds: >-
-      {{
-        (
-          [ acme_exe ~ ' --remove -d ' ~ _acme_domain,
-            acme_exe ~ ' --remove -d ' ~ _acme_domain ~ ' --ecc' ]
-          if (_has_both_variants | bool and _acme_remove_all_variants | bool)
-          else
-          [ acme_exe ~ ' --remove -d ' ~ _acme_domain ~ (' --ecc' if _acme_is_ecc else '') ]
-        )
-      }}
-  ansible.builtin.shell: "{{ cmd }}"
-  args:
-    chdir: "{{ acme_sh_directory_resolved }}"
-    executable: "{{ bash_executable_path | default('/bin/bash') }}"
-  loop: "{{ _cmds }}"
-  loop_control:
-    loop_var: cmd
-  register: acme_remove_cmds
-  failed_when: false
-  changed_when: false
-  become: true
-  become_user: "{{ acme_sh_become_user }}"
-  when: _acme_bin_stat_local.stat.exists | bool
-
-- name: REMOVE — Capture return codes from acme.sh commands
-  ansible.builtin.set_fact:
-    _remove_rcs: "{{ acme_remove_cmds.results | map(attribute='rc') | list }}"
+    label: "{{ item.domain }} (ECC: {{ item.is_ecc }})"
   become: true
   become_user: "{{ acme_sh_become_user }}"
   when: 
     - _acme_bin_stat_local.stat.exists | bool
-    - acme_remove_cmds.results is defined
+    - _targets_to_remove | default([]) | length > 0
 
-- name: REMOVE — Classify removal outcome
-  ansible.builtin.set_fact:
-    # At least one 0 means success
-    _removed_now: "{{ 0 in _remove_rcs }}"
-    
-    # No 0s, but at least one 2 means it was already gone
-    _already_absent: "{{ (0 not in _remove_rcs) and (2 in _remove_rcs) }}"
-    
-    # Neither 0 nor 2 means something actually broke (e.g., RC 1)
-    _remove_failed: "{{ (0 not in _remove_rcs) and (2 not in _remove_rcs) }}"
+# ===========================================================================
+# 3) Physical Cleanup (Internal & Deployed)
+# ===========================================================================
+- name: Remove certificate directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: >-
+    {%- set paths = [] -%}
+    {%- for t in (_targets_to_remove | default([])) -%}
+      {# A) Internal directory #}
+      {%- set suffix = '_ecc' if t.is_ecc else '' -%}
+      {%- set _ = paths.append({'path': acme_sh_directory_resolved ~ '/' ~ t.domain ~ suffix}) -%}
+      
+      {# B) Deployed directory - Uses the resolved boolean from our defaults #}
+      {%- set _should_remove = acme_sh_remove_deployed_certs | default(acme_sh_default_remove_deployed_certs, true) | bool -%}
+      {%- if _should_remove -%}
+        {%- set _ = paths.append({'path': acme_sh_copy_certs_to_path ~ '/' ~ t.domain}) -%}
+      {%- endif -%}
+    {%- endfor -%}
+    {{ paths | unique(attribute='path') }}
   become: true
-  become_user: "{{ acme_sh_become_user }}"
   when: 
     - _acme_bin_stat_local.stat.exists | bool
-    - _remove_rcs is defined
+    - _targets_to_remove | default([]) | length > 0
 
-
-# STEP 2 — Remove internal certificate directories
-- name: Resolve directories for deletion
-  ansible.builtin.set_fact:
-    _dirs_to_remove: >-
-      {{
-        [
-          acme_sh_directory_resolved ~ '/' ~ _acme_domain,
-          acme_sh_directory_resolved ~ '/' ~ _acme_domain ~ '_ecc'
-        ] if (_has_both_variants | bool and _acme_remove_all_variants | bool)
-        else [ acme_sh_cert_path_resolved ]
-      }}
-
-- name: REMOVE — Internal certificate directories
-  ansible.builtin.file:
-    path: "{{ _dir_item }}"
-    state: absent
-  loop: "{{ _dirs_to_remove }}"
-  loop_control:
-    loop_var: _dir_item
-  become: true
-  become_user: "{{ acme_sh_become_user }}"
-  when: _acme_bin_stat_local.stat.exists | bool
-
-# STEP 3 — Remove deployed cert copies
-- name: Remove deployed certificate directory if it exists
-  ansible.builtin.file:
-    path: "{{ (acme_sh_copy_certs_to_path | default(acme_sh_default_copy_certs_to_path, true)) }}/{{ _acme_domain }}"
-    state: absent
-  become: true
-  failed_when: false
-  when:
-    - _acme_bin_stat_local.stat.exists | bool
-    - item.acme_sh_remove_deployed_certs | default(acme_sh_default_remove_deployed_certs, true) | bool
-  
-# STEP 4 — Record result
-
-- name: RECORD — Prepare removal result entry
-  ansible.builtin.set_fact:
-    _removal_entry:
-      domain: "{{ _acme_domain }}"
-      removed_all: "{{ _acme_remove_all_variants | bool }}"
-      variants_found: "{{ 'Both' if _has_both_variants else ('ECC' if _acme_is_ecc else 'RSA') }}"
-      rcs: "{{ _remove_rcs | default([]) }}"
-
-- name: RECORD — Update acme_summary scoreboard
+# ===========================================================================
+# 4) Update Scoreboard
+# ===========================================================================
+- name: RECORD — Update removal status
   ansible.builtin.set_fact:
     acme_summary: >-
       {{
-        acme_summary | default({'removed': [], 'skipped': [], 'failed': []}, true) | combine({
-          'removed': (acme_summary.removed | default([]) + [_removal_entry]) if _removed_now else acme_summary.removed | default([]),
-          'skipped': (acme_summary.skipped | default([]) + [_removal_entry | combine({'status': 'already_absent'})]) if _already_absent else acme_summary.skipped | default([]),
-          'failed':  (acme_summary.failed | default([])  + [_removal_entry | combine({'message': 'acme.sh remove failed'})]) if _remove_failed else acme_summary.failed | default([])
+        acme_summary | combine({
+          'removed': (acme_summary.removed | default([]) + [{'domain': _acme_domain}])
         }, recursive=True)
       }}
   when: 
     - _acme_bin_stat_local.stat.exists | bool
-    - _remove_rcs is defined
+    - _targets_to_remove | default([]) | length > 0
+    - not _acme_uninstall | default(false) | bool
 
-# STEP 5 — Feedback
-- name: Show per-domain removal result
-  ansible.builtin.debug:
-    msg: >-
-      {{
-        (
-          '🗑️  Removed ' ~ _acme_domain ~
-          (' (all variants)' if (_acme_remove_all_variants | bool) else '')
-        ) if (_removed_now | bool) else
-        (
-          '⏭️  Already absent ' ~ _acme_domain
-        ) if (_already_absent | bool) else
-        (
-          '❌ Failed to remove ' ~ _acme_domain
-        )
-      }}
-  when:
-    - _acme_bin_stat_local.stat.exists | bool
-    - acme_remove_cmds is defined
-
-- name: Snapshot scoreboard after domain removal (verbose mode only)
-  ansible.builtin.include_tasks:
-    file: debug-acme-scoreboard.yml
-    apply:
-      tags: [always]
-  when:
-    - ansible_verbosity | int >= 2
-    - _acme_bin_stat_local.stat.exists | bool
-  tags: debug
+#- name: Snapshot scoreboard after domain removal (verbose mode only)
+#  ansible.builtin.include_tasks:
+#    file: debug-acme-scoreboard.yml
+#    apply:
+#      tags: [always]
+#  when:
+#    - ansible_verbosity | int >= 2
+#    - _acme_bin_stat_local.stat.exists | bool
+#  tags: debug

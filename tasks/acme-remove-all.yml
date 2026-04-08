@@ -19,217 +19,102 @@
 #       true  => also delete deployed dirs under acme_sh_copy_certs_to_path/<domain>
 #       false => leave deployed dirs alone
 # ============================================================================
-
-# ---------------------------------------------------------------------------
-# 0) Resolve paths (do NOT assume install task already ran)
-# ---------------------------------------------------------------------------
-- name: Resolve acme.sh base directory (teardown)
-  ansible.builtin.set_fact:
-    acme_sh_directory_resolved: >-
-      {{
-        (acme_sh_directory | default(acme_sh_default_directory, true))
-        | expanduser
-      }}
-  changed_when: false
-  become: true
-  become_user: "{{ acme_sh_become_user }}"
-
-- name: Resolve acme.sh binary path (teardown)
-  ansible.builtin.set_fact:
-    acme_sh_bin: >-
-      {{
-        acme_sh_bin | default(acme_sh_directory_resolved ~ '/acme.sh', true)
-      }}
-  changed_when: false
-  become: true
-  become_user: "{{ acme_sh_become_user }}"
-
-- name: Check if acme.sh binary exists (teardown)
+# ===========================================================================
+# 1) PREPARATION & DISCOVERY
+# ===========================================================================
+- name: Check if acme.sh exists before proceeding with teardown
   ansible.builtin.stat:
-    path: "{{ acme_sh_bin }}"
+    path: "{{ acme_sh_bin_resolved }}"
   register: _acme_bin_stat
-  changed_when: false
   become: true
   become_user: "{{ acme_sh_become_user }}"
 
-# Normalize toggles once
-- name: Normalize teardown toggles
-  ansible.builtin.set_fact:
-    _remove_all_variants: "{{ (acme_sh_remove_all_variants | default(acme_sh_default_remove_all_variants, true)) | bool }}"
-    _remove_deployed_on_uninstall: "{{ (acme_sh_remove_deployed_certs_on_uninstall | default(acme_sh_default_remove_deployed_certs_on_uninstall, true)) | bool }}"
-    _deploy_root: "{{ (acme_sh_copy_certs_to_path | default(acme_sh_default_copy_certs_to_path, true)) }}"
-  changed_when: false
-  tags: [always]
-
-# ---------------------------------------------------------------------------
-# 1) Systemd teardown (best effort)
-# ---------------------------------------------------------------------------
-- name: Stop/disable acme timer (best effort)
-  ansible.builtin.systemd_service:
-    name: "{{ acme_sh_systemd_timer_name | default(acme_sh_default_systemd_timer_name, true) }}"
-    enabled: false
-    state: stopped
-    daemon_reload: false
-  failed_when: false
-  changed_when: false
-  become: true
-
-- name: Stop/disable acme service (best effort)
-  ansible.builtin.systemd_service:
-    name: "{{ acme_sh_systemd_service_name | default(acme_sh_default_systemd_service_name, true) }}"
-    enabled: false
-    state: stopped
-    daemon_reload: false
-  failed_when: false
-  changed_when: false
-  become: true
-
-- name: Remove systemd timer unit file (best effort)
-  ansible.builtin.file:
-    path: "{{ acme_sh_systemd_timer_path | default(acme_sh_default_systemd_timer_path, true) }}"
-    state: absent
-  failed_when: false
-  become: true
-
-- name: Remove systemd service unit file (best effort)
-  ansible.builtin.file:
-    path: "{{ acme_sh_systemd_service_path | default(acme_sh_default_systemd_service_path, true) }}"
-    state: absent
-  failed_when: false
-  become: true
-
-- name: Systemd daemon reload (after unit removal)
-  ansible.builtin.systemd_service:
-    daemon_reload: true
-  failed_when: false
-  changed_when: false
-  become: true
-
-# ---------------------------------------------------------------------------
-# 2) List certs (NEW format) and remove them via acme.sh
-# ---------------------------------------------------------------------------
-- name: Retrieve current certificate list from acme.sh
-  ansible.builtin.command: "{{ acme_sh_bin }} --list"
-  register: acme_list
-  changed_when: false
-  failed_when: false
-  become: true
-  become_user: "{{ acme_sh_become_user }}"
-  when: _acme_bin_stat.stat.exists | bool
-
-- name: Parse acme.sh --list
+- name: Gather current certificate inventory for teardown
+  ansible.builtin.include_tasks: acme-cert-parser.yml
   vars:
-    acme_list_lines: "{{ acme_list.stdout_lines | default([]) }}"
-  ansible.builtin.include_tasks:
-    file: acme-parse-acme-list.yml
-    apply:
-      tags: [always]
+    acme_sh_bin: "{{ acme_sh_bin_resolved }}"
   when: _acme_bin_stat.stat.exists | bool
 
-- name: Build cert variants map from parser output
-  ansible.builtin.set_fact:
-    acme_cert_variants: "{{ acme_list_details | default({}) }}"
-  changed_when: false
-
-- name: Default empty cert map when none found / list unavailable
-  ansible.builtin.set_fact:
-    acme_cert_variants: "{{ acme_cert_variants | default({}) }}"
-  changed_when: false
-
-- name: Warn if no certificates detected
-  ansible.builtin.debug:
-    msg: "⚠️  No valid certificates found in acme.sh --list output."
-  when: (acme_cert_variants | length) == 0
-  tags: [warn]
-
-- name: Remove all certificates managed by acme.sh (logical teardown)
-  when:
-    - _acme_bin_stat.stat.exists | bool
-    - (acme_cert_variants | length) > 0
-  become: true
-  become_user: "{{ acme_sh_become_user }}"
-  loop: "{{ acme_cert_variants | dict2items }}"
-  loop_control:
-    label: "{{ item.key }}"
+# ===========================================================================
+# 2) LOGICAL REMOVAL (Domain by Domain)
+# ===========================================================================
+- name: Execute removal workflow for all discovered certificates
   ansible.builtin.include_tasks:
     file: acme-domain-remove.yml
-    apply:
-      tags: [always]
-  vars:
-    acme_domain: "{{ item.key }}"
-    acme_is_ecc: "{{ item.value.is_ecc | default(false) | bool }}"
-    acme_remove_all_variants: "{{ _remove_all_variants }}"
-
-
-# ---------------------------------------------------------------------------
-# 2.5) Remove internal cert directories under ~/.acme.sh
-# ---------------------------------------------------------------------------
-- name: Remove internal certificate directories (RSA + ECC) per domain (best effort)
-  ansible.builtin.file:
-    path: "{{ acme_sh_directory_resolved }}/{{ candidate }}"
-    state: absent
-  loop: "{{ acme_cert_variants.keys() | default([]) | list }}"
+  loop: "{{ acme_cert_info | dict2items }}"
   loop_control:
-    label: "{{ item }}"
+    label: "Removing: {{ item.key }}"
   vars:
-    candidate: "{{ item }}"
-  become: true
-  become_user: "{{ acme_sh_become_user }}"
-  failed_when: false
-  when: (acme_cert_variants | length) > 0
+    acme_sh_bin: "{{ acme_sh_bin_resolved }}"
+    acme_domain: "{{ item.key }}"
+    # We set this to true so worker doesn't update the scoreboard 100 times
+    _acme_uninstall: true 
+  when: 
+    - _acme_bin_stat.stat.exists | bool
+    - acme_cert_info is defined
+    - acme_cert_info | length > 0
 
-- name: Remove internal ECC certificate directories (…_ecc) per domain (best effort)
+# ===========================================================================
+# 3) DECOMMISSION GLOBAL AUTOMATION (Systemd)
+# ===========================================================================
+- name: Stop/disable global acme timer & service
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    enabled: false
+    state: stopped
+    daemon_reload: false
+  loop:
+    - "{{ acme_sh_systemd_timer_name | default(acme_sh_default_systemd_timer_name, true) }}"
+    - "{{ acme_sh_systemd_service_name | default(acme_sh_default_systemd_service_name, true) }}"
+  failed_when: false
+  become: true
+
+- name: Remove systemd unit files
   ansible.builtin.file:
-    path: "{{ acme_sh_directory_resolved }}/{{ item }}_ecc"
+    path: "{{ item }}"
     state: absent
-  loop: "{{ acme_cert_variants.keys() | default([]) | list }}"
-  become: true
-  become_user: "{{ acme_sh_become_user }}"
+  loop:
+    - "{{ acme_sh_systemd_timer_path | default(acme_sh_default_systemd_timer_path, true) }}"
+    - "{{ acme_sh_systemd_service_path | default(acme_sh_default_systemd_service_path, true) }}"
   failed_when: false
-  when:
-    - (acme_cert_variants | length) > 0
-    - _remove_all_variants | bool
-
-# ---------------------------------------------------------------------------
-# 2.6) Optionally remove deployed cert directories
-# ---------------------------------------------------------------------------
-- name: Remove deployed certificate directories (optional)
-  ansible.builtin.file:
-    path: "{{ _deploy_root }}/{{ item }}"
-    state: absent
-  loop: "{{ acme_cert_variants.keys() | default([]) | list }}"
   become: true
-  failed_when: false
-  when:
-    - _remove_deployed_on_uninstall | bool
-    - (acme_cert_variants | length) > 0
 
-# ---------------------------------------------------------------------------
-# 3) Was removed 
-# ---------------------------------------------------------------------------
+- name: Systemd daemon reload
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  changed_when: false
+  become: true
 
-# ---------------------------------------------------------------------------
-# 4) Uninstall acme.sh + remove directories
-# ---------------------------------------------------------------------------
-- name: Uninstall acme.sh (best effort)
-  ansible.builtin.shell: "{{ acme_sh_bin }} --uninstall"
+# ===========================================================================
+# 4) FINAL UNINSTALL & PHYSICAL CLEANUP
+# ===========================================================================
+- name: Uninstall acme.sh binary (removes aliases and shell integration)
+  ansible.builtin.shell: "{{ acme_sh_bin_resolved }} --uninstall"
   args:
     chdir: "{{ acme_sh_directory_resolved }}"
-    executable: "{{ bash_executable_path }}"
-  register: acme_uninstall_result
   failed_when: false
-  changed_when: false
+  changed_when: true
   become: true
   become_user: "{{ acme_sh_become_user }}"
   when: _acme_bin_stat.stat.exists | bool
 
-- name: Remove ~/.acme.sh directory (resolved) (best effort)
+- name: Remove management and deployment directories
   ansible.builtin.file:
-    path: "{{ acme_sh_directory_resolved }}"
+    path: "{{ item }}"
     state: absent
+  loop: >-
+    {%- set paths = [] -%}
+    {# 1. Internal directory #}
+    {%- set _ = paths.append(acme_sh_directory_resolved) -%}
+    
+    {# 2. Deployment root (if toggle is set) #}
+    {%- set _remove_deployed = acme_sh_remove_deployed_certs_on_uninstall | default(acme_sh_default_remove_deployed_certs_on_uninstall, true) | bool -%}
+    {%- if _remove_deployed and acme_sh_copy_certs_to_path is defined -%}
+      {%- set _ = paths.append(acme_sh_copy_certs_to_path) -%}
+    {%- endif -%}
+    {{ paths | unique }}
   become: true
-  become_user: "{{ acme_sh_become_user }}"
-  failed_when: false
+  when: _acme_bin_stat.stat.exists | bool
 
 - name: Remove acme.sh git repository clone (best effort)
   ansible.builtin.file:
@@ -239,12 +124,12 @@
   become_user: "{{ acme_sh_become_user }}"
   failed_when: false
 
-# ---------------------------------------------------------------------------
-# 5) Optional final check + record
-# ---------------------------------------------------------------------------
+# ===========================================================================
+# 5) VERIFICATION & SCOREBOARD
+# ===========================================================================
 - name: Confirm acme.sh binary removed
   ansible.builtin.stat:
-    path: "{{ acme_sh_bin }}"
+    path: "{{ acme_sh_bin_resolved }}"
   register: acme_bin_check
   changed_when: false
   become: true
@@ -254,17 +139,16 @@
   ansible.builtin.set_fact:
     acme_summary: >-
       {{
-        acme_summary
-        | combine({
-            'uninstalled': (acme_summary.uninstalled | default([])) + [{
-              'message': 'acme.sh removed',
-              'binary_present': (acme_bin_check.stat.exists | default(false)),
-              'acme_home': acme_sh_directory_resolved
-            }]
+        acme_summary | combine({
+            'uninstalled': true,
+            'binary_removed': not (acme_bin_check.stat.exists | default(false)),
+            'removed': acme_cert_info.keys() | map('community.general.dict_kv', 'domain') | list,
+            'details': 'Full system teardown completed',
+            'timestamp': ansible_date_time.iso8601
           }, recursive=True)
       }}
-  changed_when: true
-  tags: [summary]
+
+    acme_summary_absent: []
 
 - name: Debug confirmation result
   ansible.builtin.debug:

@@ -158,6 +158,34 @@
       {% endfor %}
 
       📅 Summary generated at: {{ now(utc=false).strftime('%Y-%m-%d %H:%M:%S') }} Central Time
+  when: not (acme_summary.uninstalled | default(false) | bool)
+  tags: [always, summary]
+
+- name: "📊 ACME.SH TEARDOWN SUMMARY"
+  vars:
+    b: "\e[1m"
+    reset: "\e[0m"
+  ansible.builtin.debug:
+    msg: |
+      {{ b }}======================================================================
+      🛑 FULL UNINSTALL COMPLETED — {{ inventory_hostname | upper }}
+      ====================================================================== {{ reset }}
+      Status:         {{ '✅ SUCCESS' if acme_summary.binary_removed else '⚠️ BINARY STILL PRESENT' }}
+      Timestamp:      {{ acme_summary.timestamp }}
+      
+      {{ b }}🗑️ PURGED CERTIFICATES:{{ reset }}
+      {% for e in acme_summary.removed %}
+      - {{ e.domain }}
+      {% endfor %}
+      
+      {{ b }}COMPONENTS REMOVED:{{ reset }}
+      - acme.sh binary and aliases
+      - Systemd Timer and Service units
+      - Git Source (if present)
+      - Deployment directories (if configured)
+      ======================================================================
+  when: acme_summary.uninstalled | default(false) | bool
+  tags: [always, summary]
 
 ## ======================================================================
 ## ENRICHED REMOVAL SUMMARY (added section)

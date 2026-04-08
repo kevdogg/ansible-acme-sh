@@ -62,16 +62,50 @@
   become_user: "{{ acme_sh_become_user }}"
   tags: [debug]
 
+- name: Resolve acme.sh remote paths
+  ansible.builtin.include_tasks:
+    file: acme-resolve-paths.yml
+  tags: [always]
+
 - name: Initialize ACME summary scoreboard
   ansible.builtin.set_fact:
     acme_summary:
-      installed: "{{ acme_summary.installed | default([]) }}"
-      renewed:   "{{ acme_summary.renewed   | default([]) }}"
-      skipped:   "{{ acme_summary.skipped   | default([]) }}"
-      removed:   "{{ acme_summary.removed   | default([]) }}"
-      failed:    "{{ acme_summary.failed    | default([]) }}"
-      warnings:  "{{ acme_summary.warnings  | default([]) }}"
+      installed: []
+      renewed: []
+      skipped: []
+      removed: []
+      failed: []
+      warnings: []
+      uninstalled: false
   tags: [always]
+
+# Gather existing certificate data prior to processing
+- name: BASELINE — Gather existing certificate dates
+  ansible.builtin.include_tasks:
+    file: acme-parse-list.yml
+    apply:
+      tags: [always]
+  tags: [always, list]
+
+############################
+# Full Uninstall Phase
+############################
+
+- name: 🧹 Full ACME teardown
+  block:
+    - name: Execute removal of all components
+      ansible.builtin.include_tasks: acme-remove-all.yml
+
+    # We call the summary display here because meta: end_host 
+    - name: Display Teardown Summary
+      ansible.builtin.include_tasks: acme-summary-compact.yml
+      tags: [always, summary]
+
+    - name: End role execution for this host
+      ansible.builtin.meta: end_host
+
+  when: _acme_uninstall | default(false) | bool
+  tags: [remove_all, teardown]
 
 ########################
 # Plan Phase
@@ -87,13 +121,6 @@
     - "'plan' in ansible_run_tags"
   tags: [plan]
 
-# Gather existing certificate data prior to processing
-- name: BASELINE — Gather existing certificate dates
-  ansible.builtin.include_tasks:
-    file: acme-parse-list.yml
-    apply:
-      tags: [always]
-  tags: [always, list]
 ########################
 # Issue / Renew Phase
 ########################
@@ -138,32 +165,23 @@
 
 # 2. Only run the removal workflow for domains that actually exist
 - name: Process ACME domain removals
-  ansible.builtin.include_tasks:
+  ansible.builtin.include_tasks: 
     file: acme-domain-remove.yml
     apply:
       tags: [remove]
   loop: "{{ acme_sh_domains | default([]) }}"
   loop_control:
-    label: "{{ item.domains[0] | default('UNKNOWN') }}"
+    label: "{{ item.domains[0] }}"
+  vars:
+    # Explicitly pass the domain name so the child file doesn't have to guess
+    acme_domain: "{{ item.domains[0] }}" 
   when:
     - not _acme_uninstall
     - item.domains is defined
     - item.domains | length > 0
     - item.remove | default(false) | bool
-    - item.domains[0] in acme_cert_info      # ONLY proceed if it's in the list
-  tags: [remove]
+    - item.domains[0] in acme_cert_info
 
-############################
-# Full Uninstall Phase
-############################
-
-- name: 🧹 Full ACME teardown (remove all certs, services, and acme.sh)
-  ansible.builtin.include_tasks:
-    file: acme-remove-all.yml
-    apply:
-      tags: [remove_all, teardown]
-  when: _acme_uninstall
-  tags: [remove_all, teardown]
 
 ############################
 # Developer / Diagnostic
