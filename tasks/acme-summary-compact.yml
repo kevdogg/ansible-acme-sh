@@ -70,7 +70,7 @@
       {{ b }}✅ Installed:{{ reset }} {{ installed | length }}
       {{ b }}🔁 Renewed:{{ reset }}   {{ renewed | length }}
       {{ b }}🗑️ Removed:{{ reset }}   {{ removed | length }}
-      {{ b }}⏭️ Skipped:{{ reset }}   {{ other | length }}
+      {{ b }}⏭️ Skipped:{{ reset }}   {{ skipped | length }}
       {{ b }}🧾 Absent:{{ reset }}    {{ absent | length }}
       {{ b }}❌ Failed:{{ reset }}    {{ failed | length }}
       {{ b }}⚠️  Warnings:{{ reset }}  {{ warnings | length }}
