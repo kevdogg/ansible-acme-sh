@@ -41,14 +41,14 @@
 
     # --- Existing Playbook Action Vars ---
     installed: "{{ acme_summary.installed | default([]) }}"
-    renewed:   "{{ acme_summary.renewed | default([]) }}"
-    removed:   "{{ acme_summary.removed | default([]) }}"
-    skipped:   "{{ acme_summary.skipped | default([]) }}"
-    failed:    "{{ acme_summary.failed | default([]) }}"
-    warnings:  "{{ acme_summary.warnings | default([]) }}"
-    uninstalled: "{{ acme_summary.uninstalled | default([]) }}"
-    skipped_absent: "{{ (acme_summary.skipped | default([])) | selectattr('status','equalto','already_absent') | list }}"
-    skipped_other:  "{{ (acme_summary.skipped | default([])) | rejectattr('status','equalto','already_absent') | list }}"
+    renewed:   "{{ acme_summary.renewed   | default([]) }}"
+    removed:   "{{ acme_summary.removed   | default([]) }}"
+    # 'skipped' now ONLY contains actual skipped tasks (like missing binaries)
+    skipped:   "{{ acme_summary.skipped   | default([]) }}"
+    # 'absent' is its own clean list from our removal check
+    absent:    "{{ acme_summary_absent    | default([]) }}"
+    failed:    "{{ acme_summary.failed    | default([]) }}"
+    warnings:  "{{ acme_summary.warnings  | default([]) }}" 
     
     # --- Audit & Inventory Vars ---
     managed_list: "{{ acme_sh_domains | map(attribute='domains') | flatten | list }}"
@@ -70,60 +70,60 @@
       {{ b }}✅ Installed:{{ reset }} {{ installed | length }}
       {{ b }}🔁 Renewed:{{ reset }}   {{ renewed | length }}
       {{ b }}🗑️ Removed:{{ reset }}   {{ removed | length }}
-      {{ b }}⏭️ Skipped:{{ reset }}   {{ skipped_other | length }}
-      {{ b }}🧾 Absent:{{ reset }}    {{ skipped_absent | length }}
+      {{ b }}⏭️ Skipped:{{ reset }}   {{ other | length }}
+      {{ b }}🧾 Absent:{{ reset }}    {{ absent | length }}
       {{ b }}❌ Failed:{{ reset }}    {{ failed | length }}
       {{ b }}⚠️  Warnings:{{ reset }}  {{ warnings | length }}
       {{ b }}🚫 Uninstalled:{{ reset }} {{ 'Yes' if (uninstalled is defined and uninstalled | length > 0) else 'No' }}
 
-      {% if installed %}
+      {% if installed -%}
       {{ b }}✅ Installed{{ reset }}
-      {% for e in installed %}
+      {% for e in installed -%}
         - {{ e.domain }}
-      {% endfor %}
-      {% endif %}
+      {% endfor -%}
+      {% endif -%}
 
-      {% if renewed %}
+      {% if renewed -%}
       {{ b }}🔁 Renewed{{ reset }}
-      {% for e in renewed %}
-        - {{ e.domain }} 
-      {% endfor %}
-      {% endif %}
+      {% for e in renewed -%}
+        - {{ e.domain }}
+      {% endfor -%}
+      {% endif -%}
 
-      {% if removed %}
+      {% if removed -%}
       {{ b }}🗑️ Removed{{ reset }}
-      {% for e in removed %}
+      {% for e in removed -%}
         - {{ e.domain }}
-      {% endfor %}
-      {% endif %}
+      {% endfor -%}
+      {% endif -%}
 
-      {% if skipped_other %}
+      {% if absent -%}
+      {{ b }}🧾 Absent (Already Removed){{ reset }}
+      {% for e in absent -%}
+        - {{ e.domain }}
+      {% endfor -%}
+      {% endif -%}
+
+      {% if skipped -%}
       {{ b }}⏭️ Skipped{{ reset }}
-      {% for e in skipped_other %}
+      {% for e in skipped -%}
         - {{ e.domain }}{% if e.message is defined %} → {{ e.message }}{% endif %}
-      {% endfor %}
-      {% endif %}
-      
-      {% if skipped_absent %}
-      {{ b }}🧾 Already absent{{ reset }}
-      {% for e in skipped_absent %}
-        - {{ e.domain }}
-      {% endfor %}
-      {% endif %}
+      {% endfor -%}
+      {% endif -%}
 
-      {% if failed %}
+      {% if failed -%}
       {{ b }}❌ Failed{{ reset }}
-      {% for e in failed %}
+      {% for e in failed -%}
         - {{ e.domain }}
-      {% endfor %}
-      {% endif %}
+      {% endfor -%}
+      {% endif -%}
 
-      {% if warnings %}
+      {% if warnings -%}
       {{ b }}⚠️ Warnings{{ reset }}
-      {% for w in warnings %}
+      {% for w in warnings -%}
         - {{ w.domain }} → {{ w.message }}
-      {% endfor %}
-      {% endif %}
+      {% endfor -%}
+      {% endif -%}
 
       {% if acme_summary.filter_tests is defined %}
       {{ b }}🧪 Filter Plugin Tests{{ reset }}

@@ -119,6 +119,24 @@
 # Remove Certificate Phase
 ############################
 
+############################
+# Remove Certificate Phase
+############################
+
+# 1. Catch domains that are already gone so they show up in the summary
+- name: RECORD — Mark already absent domains
+  ansible.builtin.set_fact:
+    acme_summary_absent: "{{ acme_summary_absent | default([]) + [ {'domain': item.domains[0]} ] }}"
+  loop: "{{ acme_sh_domains | default([]) }}"
+  loop_control:
+    label: "{{ item.domains[0] }}"
+  when:
+    - not _acme_uninstall
+    - item.remove | default(false) | bool
+    - item.domains[0] not in acme_cert_info  # It's NOT in the acme.sh --list
+  tags: [remove]
+
+# 2. Only run the removal workflow for domains that actually exist
 - name: Process ACME domain removals
   ansible.builtin.include_tasks:
     file: acme-domain-remove.yml
@@ -129,11 +147,10 @@
     label: "{{ item.domains[0] | default('UNKNOWN') }}"
   when:
     - not _acme_uninstall
-    - acme_sh_domains is defined
-    - acme_sh_domains | length > 0
     - item.domains is defined
     - item.domains | length > 0
     - item.remove | default(false) | bool
+    - item.domains[0] in acme_cert_info      # ONLY proceed if it's in the list
   tags: [remove]
 
 ############################
