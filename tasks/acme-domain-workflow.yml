@@ -460,7 +460,7 @@
     _actual_action: >-
       {{
         'INSTALL' if acme_domain_status == 'installed'  else
-        'MANAGE' if acmen_domain_status == 'skipped' else
+        'MANAGE' if acme_domain_status == 'skipped' else
         'FORCE_RENEW' if acme_domain_status == 'renewed' else
         'FAILED' if acme_domain_status == 'failed' else
         (acme_domain_status | upper)
