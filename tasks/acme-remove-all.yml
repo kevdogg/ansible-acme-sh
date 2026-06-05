@@ -53,11 +53,11 @@
     file: acme-domain-remove.yml
   loop: "{{ acme_cert_info | dict2items }}"
   loop_control:
-    loop_var: teardown_cert
+    loop_var: acme_domain_item
     label: "Removing: {{ teardown_cert.key }}"
   vars:
     acme_sh_bin: "{{ acme_sh_bin_resolved }}"
-    acme_domain: "{{ teardown_cert.key }}"
+    acme_domain: "{{ acme_domain_item.key }}"
     # We set this to true so worker doesn't update the scoreboard 100 times
     _acme_uninstall: true
   when: 

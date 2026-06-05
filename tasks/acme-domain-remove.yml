@@ -10,12 +10,26 @@
 - name: Resolve the target domain for removal
   ansible.builtin.set_fact:
     _acme_domain: >-
-      {{ 
-        acme_domain | default(
-          acme_domain_item.key if (acme_domain_item is mapping and acme_domain_item.key is defined) 
-          else (acme_domain_item.domains[0] if (acme_domain_item is mapping and acme_domain_item.domains is defined) 
-          else acme_domain_item), true
-        ) 
+      {{
+        acme_domain
+        if acme_domain is defined
+        else (
+          acme_domain_item.key
+          if (
+            acme_domain_item is defined
+            and acme_domain_item is mapping
+            and acme_domain_item.key is defined
+          )
+          else (
+            acme_domain_item.domains[0]
+            if (
+              acme_domain_item is defined
+              and acme_domain_item is mapping
+              and acme_domain_item.domains is defined
+            )
+            else acme_domain_item
+          )
+        )
       }}
   changed_when: false
 
