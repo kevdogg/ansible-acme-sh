@@ -181,7 +181,8 @@
     - item.domains | length > 0
     - item.remove | default(false) | bool
     - item.domains[0] in acme_cert_info
-
+  tags:
+    - remove
 
 ############################
 # Developer / Diagnostic
