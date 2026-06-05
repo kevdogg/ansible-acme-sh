@@ -125,7 +125,9 @@
     {%- endif -%}
     {{ paths | unique }}
   become: true
-  when: _acme_bin_stat.stat.exists | bool
+  when: >
+    _acme_bin_stat.stat.exists | bool
+    or (acme_sh_remove_deployed_certs_on_uninstall | default(acme_sh_default_remove_deployed_certs_on_uninstall, true) | bool)
 
 - name: Remove acme.sh git repository clone (best effort)
   ansible.builtin.file:
