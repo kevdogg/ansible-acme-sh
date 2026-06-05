@@ -76,26 +76,26 @@
       {{ b }}⚠️  Warnings:{{ reset }}  {{ warnings | length }}
       {{ b }}🚫 Uninstalled:{{ reset }} {{ 'Yes' if (uninstalled is defined and uninstalled | length > 0) else 'No' }}
 
-      {% if installed -%}
+      {% if installed %}
       {{ b }}✅ Installed{{ reset }}
-      {% for e in installed -%}
+      {% for e in installed %}
         - {{ e.domain }}
-      {% endfor -%}
-      {% endif -%}
+      {% endfor %}
+      {% endif %}
 
-      {% if renewed -%}
+      {% if renewed %}
       {{ b }}🔁 Renewed{{ reset }}
-      {% for e in renewed -%}
+      {% for e in renewed %}
         - {{ e.domain }}
-      {% endfor -%}
-      {% endif -%}
+      {% endfor %}
+      {% endif %}
 
-      {% if removed -%}
+      {% if removed %}
       {{ b }}🗑️ Removed{{ reset }}
-      {% for e in removed -%}
+      {% for e in removed %}
         - {{ e.domain }}
-      {% endfor -%}
-      {% endif -%}
+      {% endfor %}
+      {% endif %}
 
       {% if absent %}
       {{ b }}🧾 Absent (Already Removed){{ reset }}
@@ -111,19 +111,19 @@
       {% endfor %}
       {% endif %}
 
-      {% if failed -%}
+      {% if failed %}
       {{ b }}❌ Failed{{ reset }}
-      {% for e in failed -%}
+      {% for e in failed %}
         - {{ e.domain }}
-      {% endfor -%}
-      {% endif -%}
+      {% endfor %}
+      {% endif %}
 
-      {% if warnings -%}
+      {% if warnings %}
       {{ b }}⚠️ Warnings{{ reset }}
-      {% for w in warnings -%}
+      {% for w in warnings %}
         - {{ w.domain }} → {{ w.message }}
-      {% endfor -%}
-      {% endif -%}
+      {% endfor %}
+      {% endif %}
 
       {% if acme_summary.filter_tests is defined %}
       {{ b }}🧪 Filter Plugin Tests{{ reset }}
@@ -185,7 +185,7 @@
       - Deployment directories (if configured)
       ======================================================================
   when: acme_summary.uninstalled | default(false) | bool
-  tags: [always, summary]
+  tags: [always summary]
 
 #- name: Debug
 #  ansible.builtin.debug:
