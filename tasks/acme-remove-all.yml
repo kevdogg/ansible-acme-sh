@@ -22,6 +22,25 @@
 # ===========================================================================
 # 1) PREPARATION & DISCOVERY
 # ===========================================================================
+# ======================================================================
+# ACME.SH PATH RESOLUTION (change ~/.acme.sh to {{ become_user }}_home_dir/.acme.sh)
+# ======================================================================
+- name: Resolve acme.sh paths
+  ansible.builtin.include_tasks:
+    file: acme-resolve-paths.yml
+    apply:
+      tags: [always]
+  tags: [always]
+# ======================================================================
+# PATH RESOLUTION (RSA/ECC)
+# ======================================================================
+- name: Resolve relevant paths for this domain
+  ansible.builtin.include_tasks:
+    file: acme-resolve-rsa-vs-ecc-paths.yml
+    apply:
+      tags: [always]
+  tags: [always]
+
 - name: Check if acme.sh exists before proceeding with teardown
   ansible.builtin.stat:
     path: "{{ acme_sh_bin_resolved }}"
