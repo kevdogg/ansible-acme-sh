@@ -187,9 +187,9 @@
   when: acme_summary.uninstalled | default(false) | bool
   tags: [always, summary]
 
-- name: Debug
-  ansible.builtin.debug:
-    msg: "{{ acme_summary.skipped | to_nice_yaml }}"
+#- name: Debug
+#  ansible.builtin.debug:
+#    msg: "{{ acme_summary.skipped | to_nice_yaml }}"
 
 ## ======================================================================
 ## ENRICHED REMOVAL SUMMARY (added section)
