@@ -333,8 +333,8 @@
     acme_domain_status: >-
       {{
         'skipped' if (
-          'Skip' in (issue_result.stdout | default('')))
-          or (issue_result.rc | default(0) | int) == 2
+          ('Skip' in (issue_result.stdout | default('')))
+          or ((issue_result.rc | default(0) | int) == 2)
         ) else
         'failed'  if (
           (issue_result.rc | default(0) | int) != 0
