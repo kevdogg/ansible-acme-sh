@@ -329,18 +329,25 @@
 - name: Calculate domain status flags
   ansible.builtin.set_fact:
     # 1. Status: Is it a Skip, a Failure, a Renewal, or a fresh Install?
+
     acme_domain_status: >-
       {{
         'skipped' if ('Skip' in (issue_result.stdout | default(''))) else
         'failed'  if (
-          (issue_result.rc | default(0)) != 0
-          or (renew_result.rc | default(0)) != 0
-          or (pkcs_result.rc | default(0)) != 0
-          or (deploy_result.rc | default(0)) != 0
-        ) else (
-          'renewed' if acme_cert_updated | default(false)
-          else 'installed'
-        )
+          (issue_result.rc | default(0) | int) != 0
+          or (renew_result.rc | default(0) | int) != 0
+          or (pkcs_result.rc | default(0) | int) != 0
+          or (deploy_result.rc | default(0) | int) != 0
+        ) else
+        'renewed' if (
+          acme_cert_updated | default(false) | bool
+          and acme_cert_existed_before | default(false) | bool
+        ) else
+        'installed' if (
+          acme_cert_updated | default(false) | bool
+          and not acme_cert_existed_before | default(false) | bool
+        ) else
+        'skipped'
       }}
 
     # 2. Reason: Only set this if we are actually in a 'failed' state
@@ -452,7 +459,8 @@
       }}
     _actual_action: >-
       {{
-        'INSTALL' if acme_domain_status in ['installed','skipped'] else
+        'INSTALL' if acme_domain_status == 'installed'  else
+        'MANAGE' if acmen_domain_status == 'skipped' else
         'FORCE_RENEW' if acme_domain_status == 'renewed' else
         'FAILED' if acme_domain_status == 'failed' else
         (acme_domain_status | upper)
