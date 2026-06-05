@@ -76,56 +76,56 @@
       {{ b }}⚠️  Warnings:{{ reset }}  {{ warnings | length }}
       {{ b }}🚫 Uninstalled:{{ reset }} {{ 'Yes' if (uninstalled is defined and uninstalled | length > 0) else 'No' }}
 
-      {%- if installed %}
+      {% if installed %}
       {{ b }}✅ Installed{{ reset }}
       {% for e in installed %}
         - {{ e.domain }}
       {% endfor %}
       {%- endif %}
 
-      {%- if renewed %}
+      {% if renewed %}
       {{ b }}🔁 Renewed{{ reset }}
       {% for e in renewed %}
         - {{ e.domain }}
       {% endfor %}
       {%- endif %}
 
-      {%- if removed %}
+      {% if removed %}
       {{ b }}🗑️ Removed{{ reset }}
       {% for e in removed %}
         - {{ e.domain }}
       {% endfor %}
       {%- endif %}
 
-      {%- if absent %}
+      {% if absent %}
       {{ b }}🧾 Absent (Already Removed){{ reset }}
       {% for e in absent %}
         - {{ e.domain }}
       {% endfor %}
       {%- endif %}
 
-      {%- if skipped %}
+      {% if skipped %}
       {{ b }}⏭️ Skipped{{ reset }}
       {% for e in skipped %}
         - {{ e.domain }}{{ (' → ' ~ e.message) if e.message is defined else '' }}
       {% endfor %}
       {%- endif %}
 
-      {%- if failed %}
+      {% if failed %}
       {{ b }}❌ Failed{{ reset }}
       {% for e in failed %}
         - {{ e.domain }}
       {% endfor %}
       {%- endif %}
 
-      {%- if warnings %}
+      {% if warnings %}
       {{ b }}⚠️ Warnings{{ reset }}
       {% for w in warnings %}
         - {{ w.domain }} → {{ w.message }}
       {% endfor %}
       {%- endif %}
 
-      {%- if acme_summary.filter_tests is defined %}
+      {% if acme_summary.filter_tests is defined %}
       {{ b }}🧪 Filter Plugin Tests{{ reset }}
         → Result: {{ '✅ PASSED' if acme_summary.filter_tests.status == 'passed' else '❌ FAILED' }}
       {%- endif %}
