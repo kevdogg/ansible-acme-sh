@@ -97,12 +97,12 @@
       {% endfor -%}
       {% endif -%}
 
-      {% if absent -%}
+      {% if absent %}
       {{ b }}🧾 Absent (Already Removed){{ reset }}
       {% for e in absent -%}
         - {{ e.domain }}
-      {% endfor -%}
-      {% endif -%}
+      {% endfor %}
+      {% endif %}
 
       {% if skipped %}
       {{ b }}⏭️ Skipped{{ reset }}
