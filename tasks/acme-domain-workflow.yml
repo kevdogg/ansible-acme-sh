@@ -343,13 +343,6 @@
         )
       }}
 
-- name: DEBUG status classification
-  ansible.builtin.debug:
-    msg:
-      domain: "{{ item.domains[0] }}"
-      acme_domain_status: "{{ acme_domain_status }}"
-      acme_cert_updated: "{{ acme_cert_updated }}"
-
     # 2. Reason: Only set this if we are actually in a 'failed' state
     _reason_failed_temp: >-
       {{
@@ -370,6 +363,13 @@
 
   when: issue_result is defined or renew_result is defined
   tags: [always]
+
+- name: DEBUG status classification
+  ansible.builtin.debug:
+    msg:
+      domain: "{{ item.domains[0] }}"
+      acme_domain_status: "{{ acme_domain_status }}"
+      acme_cert_updated: "{{ acme_cert_updated }}"
 
 - name: Build final domain result object
   ansible.builtin.set_fact:
