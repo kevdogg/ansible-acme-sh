@@ -99,7 +99,7 @@
 
       {% if absent %}
       {{ b }}🧾 Absent (Already Removed){{ reset }}
-      {% for e in absent -%}
+      {% for e in absent %}
         - {{ e.domain }}
       {% endfor %}
       {% endif %}
