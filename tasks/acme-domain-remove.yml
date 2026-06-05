@@ -133,3 +133,16 @@
 #    - ansible_verbosity | int >= 2
 #    - _acme_bin_stat_local.stat.exists | bool
 #  tags: debug
+
+# ======================================================================
+# OPTIONAL DEBUG SNAPSHOT
+# ======================================================================
+
+- name: Snapshot current scoreboard (verbose mode only)
+  ansible.builtin.include_tasks:
+    file: debug-acme-scoreboard.yml
+    apply:
+      tags: [always]
+  when: (ansible_verbosity | int >= 2) or ('debug' in ansible_run_tags)
+  tags: debug
+

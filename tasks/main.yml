@@ -185,6 +185,18 @@
   tags:
     - remove
 
+- name: REFRESH — Gather certificate inventory after removals
+  ansible.builtin.include_tasks:
+    file: acme-parse-list.yml
+    apply:
+      tags: [always]
+  vars:
+    acme_list_fail_on_error: false
+    acme_list_compute_status: true
+  when:
+    - not _acme_uninstall
+  tags: [remove, summary, always]
+
 ############################
 # Developer / Diagnostic
 ############################

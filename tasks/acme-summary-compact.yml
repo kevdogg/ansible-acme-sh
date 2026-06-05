@@ -106,9 +106,9 @@
 
       {% if skipped -%}
       {{ b }}⏭️ Skipped{{ reset }}
-      {% for e in skipped -%}
+      {% for e in skipped %}
         - {{ e.domain }}{% if e.message is defined %} → {{ e.message }}{% endif %}
-      {% endfor -%}
+      {% endfor %}
       {% endif -%}
 
       {% if failed -%}
