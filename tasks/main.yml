@@ -171,6 +171,7 @@
       tags: [remove]
   loop: "{{ acme_sh_domains | default([]) }}"
   loop_control:
+    loop_var: acme_domain_item
     label: "{{ item.domains[0] }}"
   vars:
     # Explicitly pass the domain name so the child file doesn't have to guess
