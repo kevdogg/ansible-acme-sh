@@ -58,8 +58,8 @@
     {{ acme_sh_bin }} --remove -d {{ remove_target.domain }} {{ '--ecc' if remove_target.is_ecc else '' }}
   loop: "{{ _targets_to_remove | default([]) }}"
   loop_control:
-    loop_var: remove_taget
-    label: "{{ acme_domain_item.domain }} (ECC: {{ acme_domain_item.is_ecc }})"
+    loop_var: remove_target
+    label: "{{ remove_target.domain }} (ECC: {{ remove_target.is_ecc }})"
   become: true
   become_user: "{{ acme_sh_become_user }}"
   when: 
