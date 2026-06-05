@@ -104,12 +104,12 @@
       {% endfor -%}
       {% endif -%}
 
-      {% if skipped -%}
+      {% if skipped %}
       {{ b }}⏭️ Skipped{{ reset }}
       {% for e in skipped %}
         - {{ e.domain }}{% if e.message is defined %} → {{ e.message }}{% endif %}
       {% endfor %}
-      {% endif -%}
+      {% endif %}
 
       {% if failed -%}
       {{ b }}❌ Failed{{ reset }}
@@ -186,6 +186,11 @@
       ======================================================================
   when: acme_summary.uninstalled | default(false) | bool
   tags: [always, summary]
+
+- name: Debug
+  ansible.builtin.debug:
+    msg: |
+      acme_summary: {{ acme_summary:skipped }}
 
 ## ======================================================================
 ## ENRICHED REMOVAL SUMMARY (added section)
