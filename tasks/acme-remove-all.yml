@@ -153,9 +153,11 @@
         acme_summary | combine({
             'uninstalled': true,
             'binary_removed': not (acme_bin_check.stat.exists | default(false)),
-            'removed': (acme_cert_info | default({})).keys(),
+            'removed': (
+              (acme_cert_info | default({})).keys(),
               | map('community.general.dict_kv', 'domain')
-              | list,
+              | list
+            ),
             'details': 'Full system teardown completed',
             'timestamp': ansible_date_time.iso8601
           }, recursive=True)

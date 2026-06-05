@@ -157,6 +157,8 @@
     file: debug-acme-scoreboard.yml
     apply:
       tags: [always]
-  when: (ansible_verbosity | int >= 2) or ('debug' in ansible_run_tags)
+  when:
+    - not _acme_uninstall | default(false) | bool
+    - (ansible_verbosity | int >= 2) or ('debug' in ansible_run_tags)
   tags: debug
 
