@@ -70,6 +70,11 @@
   become: true
   become_user: "{{ acme_sh_become_user | default(omit) }}"
 
+- name: Determine if certificate existed before workflow
+  ansible.builtin.set_fact:
+    acme_cert_existed_before: "{{ live_cert_before.stat.exists | default(false) | bool }}"
+  changed_when: false
+
 # ======================================================================
 # ISSUE / RENEW
 # ======================================================================
@@ -338,6 +343,13 @@
         )
       }}
 
+- name: DEBUG status classification
+  ansible.builtin.debug:
+    msg:
+      domain: "{{ item.domains[0] }}"
+      acme_domain_status: "{{ acme_domain_status }}"
+      acme_cert_updated: "{{ acme_cert_updated }}"
+
     # 2. Reason: Only set this if we are actually in a 'failed' state
     _reason_failed_temp: >-
       {{
@@ -366,7 +378,7 @@
       domains: "{{ item.domains }}"
       status: "{{ _acme_sub_status }}"
       acme_status: "{{ acme_domain_status }}"
-      reason_failed: "{{ _reason_failed_temp | default(omit) }}"
+      reason_failed: "{{ _reason_failed_temp | default(omit, true) }}"
       rc_issue: "{{ issue_result.rc | default(omit) }}"
       rc_renew: "{{ renew_result.rc | default(omit) }}"
       rc_pkcs: "{{ pkcs_result.rc | default(omit) }}"
@@ -378,7 +390,7 @@
       new_days_remaining: "{{ acme_post_cert_info[item.domains[0]].days_remaining | default(omit) }}"
   when: 
     - acme_domain_status is defined
-    - _reason_failed_temp is defined
+#    - _reason_failed_temp is defined
     - _acme_sub_status is defined
   tags: [always]
 
