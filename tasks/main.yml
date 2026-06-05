@@ -172,16 +172,16 @@
   loop: "{{ acme_sh_domains | default([]) }}"
   loop_control:
     loop_var: acme_domain_item
-    label: "{{ item.domains[0] }}"
+    label: "{{ acme_domain_item.domains[0] }}"
   vars:
     # Explicitly pass the domain name so the child file doesn't have to guess
     acme_domain: "{{ item.domains[0] }}" 
   when:
     - not _acme_uninstall
-    - item.domains is defined
-    - item.domains | length > 0
-    - item.remove | default(false) | bool
-    - item.domains[0] in acme_cert_info
+    - acme_domain_item.domains is defined
+    - acme_domain_item.domains | length > 0
+    - acme_domain_item.remove | default(false) | bool
+    - acme_domain_item.domains[0] in acme_cert_info
   tags:
     - remove
 
