@@ -31,15 +31,6 @@
     apply:
       tags: [always]
   tags: [always]
-# ======================================================================
-# PATH RESOLUTION (RSA/ECC)
-# ======================================================================
-- name: Resolve relevant paths for this domain
-  ansible.builtin.include_tasks:
-    file: acme-resolve-rsa-vs-ecc-paths.yml
-    apply:
-      tags: [always]
-  tags: [always]
 
 - name: Check if acme.sh exists before proceeding with teardown
   ansible.builtin.stat:
