@@ -203,5 +203,5 @@
       tags: [summary]
   when:
     - acme_summary is defined
-    - "'plan' not in ansible_run_tags"
+    - ansible_run_tags | difference(['plan', 'debug']) | length > 0
   tags: [summary]
