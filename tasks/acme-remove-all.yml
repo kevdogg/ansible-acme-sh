@@ -30,7 +30,7 @@
   become_user: "{{ acme_sh_become_user }}"
 
 - name: Gather current certificate inventory for teardown
-  ansible.builtin.include_tasks: acme-cert-parser.yml
+  ansible.builtin.include_tasks: acme-parse-list.yml
   vars:
     acme_sh_bin: "{{ acme_sh_bin_resolved }}"
   when: _acme_bin_stat.stat.exists | bool
@@ -43,12 +43,13 @@
     file: acme-domain-remove.yml
   loop: "{{ acme_cert_info | dict2items }}"
   loop_control:
-    label: "Removing: {{ item.key }}"
+    loop_var: teardown_cert
+    label: "Removing: {{ teardown_cert.key }}"
   vars:
     acme_sh_bin: "{{ acme_sh_bin_resolved }}"
-    acme_domain: "{{ item.key }}"
+    acme_domain: "{{ teardown_cert.key }}"
     # We set this to true so worker doesn't update the scoreboard 100 times
-    _acme_uninstall: true 
+    _acme_uninstall: true
   when: 
     - _acme_bin_stat.stat.exists | bool
     - acme_cert_info is defined
@@ -142,12 +143,13 @@
         acme_summary | combine({
             'uninstalled': true,
             'binary_removed': not (acme_bin_check.stat.exists | default(false)),
-            'removed': acme_cert_info.keys() | map('community.general.dict_kv', 'domain') | list,
+            'removed': (acme_cert_info | default({})).keys(),
+              | map('community.general.dict_kv', 'domain')
+              | list,
             'details': 'Full system teardown completed',
             'timestamp': ansible_date_time.iso8601
           }, recursive=True)
       }}
-
     acme_summary_absent: []
 
 - name: Debug confirmation result

@@ -94,11 +94,17 @@
 - name: 🧹 Full ACME teardown
   block:
     - name: Execute removal of all components
-      ansible.builtin.include_tasks: acme-remove-all.yml
+      ansible.builtin.include_tasks: 
+        file: acme-remove-all.yml
+        apply:
+          tags: [remove_all, teardown]
 
     # We call the summary display here because meta: end_host 
     - name: Display Teardown Summary
-      ansible.builtin.include_tasks: acme-summary-compact.yml
+      ansible.builtin.include_tasks: 
+        file: acme-summary-compact.yml
+        apply:
+          tags: [summary]
       tags: [always, summary]
 
     - name: End role execution for this host
