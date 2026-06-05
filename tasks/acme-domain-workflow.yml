@@ -184,24 +184,24 @@
     - not item.force_renew | default(false) | bool
     - not item.custom_command | default(false) | bool
 
-- name: Mark certificate as already valid (no renewal needed) if certificate not due for renewal
-  ansible.builtin.set_fact:
-    acme_summary: >-
-      {{
-        acme_summary | combine({
-          'skipped': (acme_summary.skipped | default([])) + [{
-            'domain': (item.domains | first),
-            'status': 'already_valid',
-            'message': 'Next renewal: ' ~ (acme_cert_info[item.domains | first].renew | default('Unknown'))
-          }]
-        }, recursive=True)
-      }}
-  when:
-    - not item.force_renew | default(false) | bool
-    - not item.custom_command | default(false) | bool
-    - (issue_result.rc | int) == 2
-  changed_when: true
-  tags: [summary]
+#- name: Mark certificate as already valid (no renewal needed) if certificate not due for renewal
+#  ansible.builtin.set_fact:
+#    acme_summary: >-
+#      {{
+#        acme_summary | combine({
+#          'skipped': (acme_summary.skipped | default([])) + [{
+#            'domain': (item.domains | first),
+#            'status': 'already_valid',
+#            'message': 'Next renewal: ' ~ (acme_cert_info[item.domains | first].renew | default('Unknown'))
+#          }]
+#        }, recursive=True)
+#      }}
+#  when:
+#    - not item.force_renew | default(false) | bool
+#    - not item.custom_command | default(false) | bool
+#    - (issue_result.rc | int) == 2
+#  changed_when: true
+#  tags: [summary]
 
 # ======================================================================
 # POST-ISSUE SNAPSHOT
@@ -332,7 +332,10 @@
 
     acme_domain_status: >-
       {{
-        'skipped' if ('Skip' in (issue_result.stdout | default(''))) else
+        'skipped' if (
+          'Skip' in (issue_result.stdout | default('')))
+          or (issue_result.rc | default(0) | int) == 2
+        ) else
         'failed'  if (
           (issue_result.rc | default(0) | int) != 0
           or (renew_result.rc | default(0) | int) != 0
