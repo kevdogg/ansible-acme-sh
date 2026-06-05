@@ -189,7 +189,7 @@
 
 - name: Debug
   ansible.builtin.debug:
-    msg: "{{ acme_summary:skipped | to_nice_yaml }}"
+    msg: "{{ acme_summary.skipped | to_nice_yaml }}"
 
 ## ======================================================================
 ## ENRICHED REMOVAL SUMMARY (added section)
