@@ -265,7 +265,8 @@
   register: pkcs_result
   failed_when: pkcs_result.rc != 0
   when:
-    - acme_cert_updated | default(false) | bool
+    - (acme_cert_updated | default(false) | bool) or
+      (item.force_deploy | default(false) | bool)  
   become: true
   become_user: "{{ acme_sh_become_user | default(omit) }}"
 
