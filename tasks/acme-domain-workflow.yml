@@ -85,11 +85,18 @@
     {{
       acme_exe ~ ' --issue -d ' ~ (item.domains | join(' -d ')) ~
       ' --dns ' ~ (item.dns_provider | default(acme_sh_default_dns_provider | default('dns_cf'))) ~
+      ( ' --server ' ~ (
+          item.acme_server
+          | default(
+              'letsencrypt_test' if (item.staging | default(acme_sh_default_staging | default(false)) | bool)
+              else 'letsencrypt'
+            )
+        )
+      ) ~
       ' --dnssleep ' ~ (item.dns_sleep | default(acme_sh_default_dns_sleep | default('30')) | string) ~
       ( ' --force' if (item.force_issue | default(acme_sh_default_force_issue | default(false)) | bool)
                      or (item.force_renew | default(acme_sh_default_force_renew | default(false)) | bool)
         else '' ) ~
-      ( ' --staging' if item.staging | default(acme_sh_default_staging | default(false)) | bool else '' ) ~
       ( ' --debug' if item.debug | default(acme_sh_default_debug | default(false)) | bool else '' ) ~
       ( ' ' ~ (item.acme_sh_extra_flags_issue | default(acme_sh_default_extra_flags_issue | default('--keylength ec-384 --ecc'))) )
     }}
@@ -158,10 +165,17 @@
       acme_exe ~ ' --issue -d ' ~ (item.domains | join(' -d ')) ~
       ' --dns ' ~ (item.dns_provider | default(acme_sh_default_dns_provider | default('dns_cf'))) ~
       ' --dnssleep ' ~ (item.dns_sleep | default(acme_sh_default_dns_sleep | default('30')) | string) ~
+      ( ' --server ' ~ (
+          item.acme_server
+          | default(
+              'letsencrypt_test' if (item.staging | default(acme_sh_default_staging | default(false)) | bool)
+              else 'letsencrypt'
+            )
+        )
+      ) ~
       ( ' --force' if (item.force_issue | default(acme_sh_default_force_issue | default(false)) | bool)
                      or (item.force_renew | default(acme_sh_default_force_renew | default(false)) | bool)
         else '' ) ~
-      ( ' --staging' if item.staging | default(acme_sh_default_staging | default(false)) | bool else '' ) ~
       ( ' --debug' if item.debug | default(acme_sh_default_debug | default(false)) | bool else '' ) ~
       ( ' ' ~ (item.acme_sh_extra_flags_issue | default(acme_sh_default_extra_flags_issue | default('--keylength ec-384 --ecc'))) )
     }}
