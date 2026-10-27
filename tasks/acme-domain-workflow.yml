@@ -51,23 +51,6 @@
   tags: [always]
 
 
-- name: Install certificate reload script
-  ansible.builtin.copy:
-    src: "{{ acme_sh_reload_script.src }}"
-    dest: "{{ acme_sh_reload_script.dest }}"
-    owner: root
-    group: root
-    mode: "0750"
-  become: true
-  when: acme_sh_reload_script is defined
-
-- name: DEBUG - Show resolved certificate reload command
-  ansible.builtin.debug:
-    msg: "{{ item.install_cert_reloadcmd | default('No reload command configured') }}"
-
-- name: DEBUG - Stop before certificate issuance
-  ansible.builtin.meta: end_host
-
 # ======================================================================
 # PRE-DEPLOY SNAPSHOT
 # ======================================================================
@@ -345,8 +328,8 @@
   when:
     - _localcopy_hook.stat.exists
     - (pkcs_result.rc | default(1)) == 0
-    - acme_cert_updated | default(false) | bool
-    
+    - (acme_cert_updated | default(false) | bool) or
+      (item.force_deploy | default(false) | bool) 
 
 # ======================================================================
 # POST-DEPLOY VALIDATION
