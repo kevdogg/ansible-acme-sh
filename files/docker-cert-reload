@@ -9,5 +9,13 @@ CONTAINER="${3:?Docker container name required}"
 chown "root:${GID}" "${CERT_DIR}/key.pem"
 chmod 0640 "${CERT_DIR}/key.pem"
 
-# Restart the application
-/usr/bin/docker restart -t 60 "${CONTAINER}"
+# Restart the application only if the container is running
+if [[ "$(/usr/bin/docker inspect \
+    --format '{{.State.Running}}' \
+    "${CONTAINER}" 2>/dev/null || true)" == "true" ]]; then
+
+    echo "Restarting Docker container: ${CONTAINER}"
+    /usr/bin/docker restart -t 60 "${CONTAINER}"
+else
+    echo "Docker container ${CONTAINER} does not exist or is not running; skipping restart."
+fi
